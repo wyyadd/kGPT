@@ -279,5 +279,5 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--lr', type=float, default=5e-4)
         parser.add_argument('--weight_decay', type=float, default=0.1)
         parser.add_argument('--T_max', type=int, default=30)
-        parser.add_argument('--submission_dir', type=str, default='./submissions')
+        parser.add_argument('--submission_dir', type=str, default='./data/pkl_files')
         return parent_parser

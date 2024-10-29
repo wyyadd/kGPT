@@ -37,6 +37,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_nodes', type=int, default=1)
     parser.add_argument('--max_epochs', type=int, default=30)
     parser.add_argument('--ckpt_path', type=str, default=None)
+    parser.add_argument('--mode', type=str, default="train")
     KGPT.add_model_specific_args(parser)
     args = parser.parse_args()
 
@@ -51,4 +52,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices, num_nodes=args.num_nodes,
                          strategy=DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
                          callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs, profiler="simple")
-    trainer.fit(model, dataloader, ckpt_path=args.ckpt_path)
+    if args.mode == 'train':
+        trainer.fit(model, dataloader, ckpt_path=args.ckpt_path)
+    else:
+        trainer.test(model, dataloader, ckpt_path=args.ckpt_path)

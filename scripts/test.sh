@@ -19,9 +19,9 @@ srun python3 train_k_gpt.py \
 --root="$project/kGPT/data" \
 --train_processed_dir="$SLURM_TMPDIR/processed" \
 --num_workers=$SLURM_CPUS_PER_TASK \
---train_batch_size=6 \
---val_batch_size=6 \
---test_batch_size=6 \
+--train_batch_size=12 \
+--val_batch_size=12 \
+--test_batch_size=12 \
 --accelerator="auto" \
 --devices=-1 \
 --num_nodes=$SLURM_NNODES \

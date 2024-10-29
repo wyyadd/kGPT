@@ -8,7 +8,7 @@
 #SBATCH --mail-user=wyyadd@gmail.com
 #SBATCH --mail-type=ALL
 
-cd $project/bGPT
+cd $project/kGPT
 module purge module load python/3.11
 source ~/agents/bin/activate
 
@@ -16,12 +16,12 @@ pip3 install -r requirements.txt
 
 srun python3 train_k_gpt.py \
 --mode="test" \
---root="$project/bGPT/data" \
+--root="$project/kGPT/data" \
 --train_processed_dir="$SLURM_TMPDIR/processed" \
 --num_workers=$SLURM_CPUS_PER_TASK \
---train_batch_size=3 \
---val_batch_size=3 \
---test_batch_size=3 \
+--train_batch_size=6 \
+--val_batch_size=6 \
+--test_batch_size=6 \
 --accelerator="auto" \
 --devices=-1 \
 --num_nodes=$SLURM_NNODES \

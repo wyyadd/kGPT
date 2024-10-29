@@ -5,12 +5,9 @@ import torch
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.strategies import DDPStrategy
-from torch_geometric.data import DataLoader
-from torch_geometric.transforms import Compose
 
-from datasets import WaymoSimDataset
+from datamodules import WaymoSimDataModule
 from simulators import KGPT
-from transforms import SimTargetBuilder, SimAgentFilter
 
 if __name__ == '__main__':
     torch.set_float32_matmul_precision("high")
@@ -42,17 +39,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     model = KGPT(**vars(args))
-    val_dataset = WaymoSimDataset(root=args.root, split='val', interactive=args.interactive,
-                                  transform=Compose([SimAgentFilter(128, 11), SimTargetBuilder()]))
-    dataloader = DataLoader(val_dataset, batch_size=args.val_batch_size, shuffle=False, num_workers=args.num_workers,
-                            pin_memory=args.pin_memory, persistent_workers=args.persistent_workers)
-    # datamodule = WaymoSimDataModule(**vars(args))
+    datamodule = WaymoSimDataModule(**vars(args))
     model_checkpoint = ModelCheckpoint(monitor='val_loss', save_top_k=5, mode='min')
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices, num_nodes=args.num_nodes,
                          strategy=DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
                          callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs, profiler="simple")
     if args.mode == 'train':
-        trainer.fit(model, dataloader, ckpt_path=args.ckpt_path)
+        trainer.fit(model, datamodule, ckpt_path=args.ckpt_path)
     else:
-        trainer.test(model, dataloader, ckpt_path=args.ckpt_path)
+        trainer.test(model, datamodule, ckpt_path=args.ckpt_path)

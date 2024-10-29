@@ -6,7 +6,7 @@
 #SBATCH --mail-user=wyyadd@gmail.com
 #SBATCH --mail-type=ALL
 
-cd $project/bGPT
+cd $project/kGPT
 module purge module load python/3.11
 source ~/agents/bin/activate
 

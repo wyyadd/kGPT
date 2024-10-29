@@ -23,6 +23,9 @@ class KGPT(pl.LightningModule):
                  pos_dim: int,
                  vel_dim: int,
                  theta_dim: int,
+                 acceleration_dim: int,
+                 yaw_rate_dim: int,
+                 num_modes: int,
                  num_steps: int,
                  num_init_steps: int,
                  num_rollout_steps: int,
@@ -33,7 +36,6 @@ class KGPT(pl.LightningModule):
                  num_heads: int,
                  head_dim: int,
                  dropout: float,
-                 bin_nums: int,
                  lr: float,
                  weight_decay: float,
                  T_max: int,
@@ -46,9 +48,9 @@ class KGPT(pl.LightningModule):
         self.pos_dim = pos_dim
         self.vel_dim = vel_dim
         self.theta_dim = theta_dim
-        self.acceleration_dim = 2
-        self.yaw_rate_dim = 1
-        self.num_modes = 16
+        self.acceleration_dim = acceleration_dim
+        self.yaw_rate_dim = yaw_rate_dim
+        self.num_modes = num_modes
         self.num_steps = num_steps
         self.num_init_steps = num_init_steps
         self.num_rollout_steps = num_rollout_steps
@@ -59,7 +61,6 @@ class KGPT(pl.LightningModule):
         self.num_heads = num_heads
         self.head_dim = head_dim
         self.dropout = dropout
-        self.bin_nums = bin_nums
         self.lr = lr
         self.weight_decay = weight_decay
         self.T_max = T_max
@@ -134,11 +135,7 @@ class KGPT(pl.LightningModule):
         data['agent']['height'] = data['agent']['height'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
         pred = self(data)
         pi = pred['pi']
-        pred = torch.cat(
-            [pred['acceleration'],
-             pred['yaw_rate'],
-             pred['acc_scale'],
-             pred['yaw_scale']], dim=-1)
+        pred = torch.cat([pred['acceleration'], pred['yaw_rate'], pred['acc_scale'], pred['yaw_scale']], dim=-1)
         target = data['agent']['target'][:, :self.num_steps]
 
         loss = self.loss(pred=pred.reshape(-1, self.num_modes, pred.size(-1)),
@@ -161,40 +158,40 @@ class KGPT(pl.LightningModule):
         data['agent']['height'] = data['agent']['height'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
 
         traj_eval = []
-        num_action_steps = 10
+        interval = 0.1
         for k in range(32):
-            for t in range(self.num_rollout_steps // num_action_steps):
+            for t in range(self.num_rollout_steps):
                 pred = self(data)
-                pi = pred['pi'][:, self.num_init_steps + t * num_action_steps - 1]  # [A, K]
+                pi = pred['pi'][:, self.num_init_steps + t - 1]  # [A, K]
                 sample_inds = torch.multinomial(F.softmax(pi, dim=-1), num_samples=1, replacement=True).squeeze(-1)
                 # sample_inds = top_p_sampling(pi, 0.95)
-                pos = pred['pos_loc'][torch.arange(pi.size(0)), self.num_init_steps + t * num_action_steps - 1,
-                      sample_inds, :num_action_steps, :self.pos_dim]
-                vel = pred['vel_loc'][torch.arange(pi.size(0)), self.num_init_steps + t * num_action_steps - 1,
-                      sample_inds, :num_action_steps, :self.vel_dim]
-                theta = pred['theta_loc'][torch.arange(pi.size(0)), self.num_init_steps + t * num_action_steps - 1,
-                        sample_inds, :num_action_steps, :self.theta_dim]
+                acc = pred['acceleration'][torch.arange(pi.size(0)), self.num_init_steps + t - 1,
+                      sample_inds, :self.acceleration_dim]
+                yaw_rate = pred['yaw_rate'][torch.arange(pi.size(0)), self.num_init_steps + t - 1,
+                           sample_inds, :self.yaw_rate_dim]
+
                 # Transform to global coordinates
-                current_theta = data['agent']['heading'][:, self.num_init_steps + t * num_action_steps - 1]
+                current_theta = data['agent']['heading'][:, self.num_init_steps + t - 1]
                 cos, sin = current_theta.cos(), current_theta.sin()
                 rot_mat = torch.stack([torch.stack([cos, sin], dim=-1),
-                                       torch.stack([-sin, cos], dim=-1)],
-                                      dim=-2)
-                pos[..., :2] = pos[..., :2] @ rot_mat
-                pos[..., :2] += data['agent']['position'][:, [self.num_init_steps + t * num_action_steps - 1], :2]
-                if self.pos_dim == 3:
-                    pos[..., 2] += data['agent']['position'][:, [self.num_init_steps + t * num_action_steps - 1], 2]
-                else:
-                    pos[..., 2] = data['agent']['position'][:, [self.num_init_steps - 1], 2]
-                data['agent']['position'][:,
-                self.num_init_steps + t * num_action_steps: self.num_init_steps + (t + 1) * num_action_steps,
-                :self.pos_dim] = pos[..., :self.pos_dim]
-                vel[..., :2] = vel[..., :2] @ rot_mat
-                data['agent']['velocity'][:,
-                self.num_init_steps + t * num_action_steps: self.num_init_steps + (t + 1) * num_action_steps,
-                :self.vel_dim] = vel[..., :self.vel_dim]
-                data['agent']['heading'][:, self.num_init_steps + t * num_action_steps: self.num_init_steps + (
-                        t + 1) * num_action_steps] = wrap_angle(current_theta.unsqueeze(-1) + theta[..., 0])
+                                       torch.stack([-sin, cos], dim=-1)], dim=-2)
+
+                # velocity
+                acc = (acc.unsqueeze(-2) @ rot_mat).squeeze(-2)
+                vel_old = data['agent']['velocity'][:, self.num_init_steps + t - 1, :self.vel_dim]
+                vel = acc * interval + vel_old
+                data['agent']['velocity'][:, self.num_init_steps + t, :self.vel_dim] = vel[..., :self.vel_dim]
+
+                # position
+                delta_pos = (vel + vel_old) / 2 * interval
+                data['agent']['position'][:, self.num_init_steps + t, :2] = data['agent']['position'][:,
+                                                                            self.num_init_steps + t - 1, :2] + delta_pos
+                data['agent']['position'][:, self.num_init_steps + t, 2] = data['agent']['position'][:,
+                                                                            self.num_init_steps - 1, 2]
+
+                # heading
+                data['agent']['heading'][:, self.num_init_steps + t] = wrap_angle(
+                    current_theta + yaw_rate.squeeze(-1) * interval)
             traj_eval.append(torch.cat([data['agent']['position'][eval_mask, self.num_init_steps:, :3],
                                         data['agent']['heading'][eval_mask, self.num_init_steps:].unsqueeze(-1)],
                                        dim=-1))
@@ -218,6 +215,7 @@ class KGPT(pl.LightningModule):
     def on_test_end(self):
         try:
             with open(os.path.join(self.submission_dir, f'{self.global_rank}.pkl'), 'wb') as handle:
+                # noinspection PyTypeChecker
                 pickle.dump(self.test_predictions, handle, protocol=pickle.HIGHEST_PROTOCOL)
         except Exception as e:
             print(f'Error saving predictions: {e}')
@@ -265,6 +263,9 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--pos_dim', type=int, default=3)
         parser.add_argument('--vel_dim', type=int, default=2)
         parser.add_argument('--theta_dim', type=int, default=1)
+        parser.add_argument('--acceleration_dim', type=int, default=2)
+        parser.add_argument('--yaw_rate_dim', type=int, default=1)
+        parser.add_argument('--num_modes', type=int, default=16)
         parser.add_argument('--num_steps', type=int, default=91)
         parser.add_argument('--num_init_steps', type=int, default=11)
         parser.add_argument('--num_rollout_steps', type=int, default=80)
@@ -275,9 +276,8 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--num_heads', type=int, default=8)
         parser.add_argument('--head_dim', type=int, default=16)
         parser.add_argument('--dropout', type=float, default=0.1)
-        parser.add_argument('--bin_nums', type=int, default=64)
         parser.add_argument('--lr', type=float, default=5e-4)
         parser.add_argument('--weight_decay', type=float, default=0.1)
         parser.add_argument('--T_max', type=int, default=30)
-        parser.add_argument('--submission_dir', type=str, default='./')
+        parser.add_argument('--submission_dir', type=str, default='./submissions')
         return parent_parser

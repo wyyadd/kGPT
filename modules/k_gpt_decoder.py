@@ -57,8 +57,8 @@ class KGPTDecoder(nn.Module):
         input_dim_x_a = 5
         input_dim_x_m = input_dim - 1
         # input_dim_r_t = 2 + input_dim
-        input_dim_r_m2a = 1 + input_dim
-        input_dim_r_a2a = 1 + input_dim
+        input_dim_r = 1 + input_dim
+        # input_dim_r_a2a = 1 + input_dim
 
         self.type_a_emb = nn.Embedding(num_agent_types, hidden_dim)
         self.type_m_emb = nn.Embedding(num_map_types, hidden_dim)
@@ -68,7 +68,7 @@ class KGPTDecoder(nn.Module):
         # self.r_patch_emb = FourierEmbedding(input_dim=input_dim_r_t, hidden_dim=hidden_dim,
         #                                     num_freq_bands=num_freq_bands)
         # self.r_t_emb = FourierEmbedding(input_dim=input_dim_r_t, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
-        self.r_emb = FourierEmbedding(input_dim=input_dim_r_m2a, hidden_dim=hidden_dim,
+        self.r_emb = FourierEmbedding(input_dim=input_dim_r, hidden_dim=hidden_dim,
                                       num_freq_bands=num_freq_bands)
         # self.r_a2a_emb = FourierEmbedding(input_dim=input_dim_r_a2a, hidden_dim=hidden_dim,
         #                                   num_freq_bands=num_freq_bands)

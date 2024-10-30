@@ -80,9 +80,9 @@ class KGPT(pl.LightningModule):
         )
         self.head = KGPTHead(
             hidden_dim=hidden_dim,
-            acceleration_dim=self.acceleration_dim,
-            yaw_rate_dim=self.yaw_rate_dim,
-            num_modes=self.num_modes,
+            acceleration_dim=acceleration_dim,
+            yaw_rate_dim=yaw_rate_dim,
+            num_modes=num_modes,
         )
 
         self.loss = MixtureNLLLoss(component_distribution=['laplace'] * self.acceleration_dim +
@@ -270,7 +270,7 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--num_init_steps', type=int, default=11)
         parser.add_argument('--num_rollout_steps', type=int, default=80)
         parser.add_argument('--num_m2a_nbrs', type=int, default=32)
-        parser.add_argument('--num_a2a_nbrs', type=int, default=32)
+        parser.add_argument('--num_a2a_nbrs', type=int, default=16)
         parser.add_argument('--num_freq_bands', type=int, default=64)
         parser.add_argument('--num_layers', type=int, default=2)
         parser.add_argument('--num_heads', type=int, default=8)

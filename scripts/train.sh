@@ -27,5 +27,5 @@ srun python3 train_k_gpt.py \
 --num_nodes=$SLURM_NNODES \
 --train_batch_size=8 \
 --val_batch_size=8 \
---test_batch_size=8 \
+--test_batch_size=64 \
 --lr=2e-3

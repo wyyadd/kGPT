@@ -5,8 +5,10 @@ import torch
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.strategies import DDPStrategy
+from torch_geometric.loader import DataLoader
 
 from datamodules import WaymoSimDataModule
+from datasets import WaymoSimDataset
 from simulators import KGPT
 
 if __name__ == '__main__':
@@ -38,14 +40,20 @@ if __name__ == '__main__':
     KGPT.add_model_specific_args(parser)
     args = parser.parse_args()
 
-    model = KGPT(**vars(args))
-    datamodule = WaymoSimDataModule(**vars(args))
-    model_checkpoint = ModelCheckpoint(monitor='val_loss', save_top_k=5, mode='min')
-    lr_monitor = LearningRateMonitor(logging_interval='epoch')
-    trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices, num_nodes=args.num_nodes,
-                         strategy=DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
-                         callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs, profiler="simple")
     if args.mode == 'train':
+        model = KGPT(**vars(args))
+        datamodule = WaymoSimDataModule(**vars(args))
+        model_checkpoint = ModelCheckpoint(monitor='val_loss', save_top_k=5, mode='min')
+        lr_monitor = LearningRateMonitor(logging_interval='epoch')
+        trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices, num_nodes=args.num_nodes,
+                             strategy=DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
+                             callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs, profiler="simple")
         trainer.fit(model, datamodule, ckpt_path=args.ckpt_path)
     else:
-        trainer.test(model, datamodule, ckpt_path=args.ckpt_path)
+        model = KGPT.load_from_checkpoint(checkpoint_path=args.ckpt_path)
+        test_dataset = WaymoSimDataset(root=args.root, split='test', interactive=args.interactive)
+        dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.num_workers,
+                                pin_memory=args.pin_memory, persistent_workers=args.persistent_workers)
+        trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices,
+                             strategy="ddp", num_nodes=args.num_nodes)
+        trainer.test(model, dataloader)

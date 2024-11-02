@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --nodes=2
+#SBATCH --nodes=4
 #SBATCH --ntasks-per-node=4
 #SBATCH --gpus-per-node=a100:4
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=2G
-#SBATCH --time=1-11:00:00
+#SBATCH --time=1-12:00:00
 #SBATCH --mail-user=wyyadd@gmail.com
 #SBATCH --mail-type=ALL
 
@@ -28,4 +28,4 @@ srun python3 train_k_gpt.py \
 --train_batch_size=8 \
 --val_batch_size=8 \
 --test_batch_size=8 \
---lr=1e-5
+--lr=2e-3

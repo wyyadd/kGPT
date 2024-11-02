@@ -214,6 +214,8 @@ class KGPT(pl.LightningModule):
 
     def on_test_end(self):
         try:
+            if not os.path.isdir(self.submission_dir):
+                os.makedirs(self.submission_dir)
             with open(os.path.join(self.submission_dir, f'{self.global_rank}.pkl'), 'wb') as handle:
                 # noinspection PyTypeChecker
                 pickle.dump(self.test_predictions, handle, protocol=pickle.HIGHEST_PROTOCOL)

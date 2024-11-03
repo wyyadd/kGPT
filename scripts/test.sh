@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --nodes=1
+#SBATCH --nodes=4
 #SBATCH --ntasks-per-node=4
 #SBATCH --gpus-per-node=a100:4
 #SBATCH --cpus-per-task=4
-#SBATCH --mem-per-cpu=4G
-#SBATCH --time=0-05:00:00
+#SBATCH --mem-per-cpu=2G
+#SBATCH --time=1-05:00:00
 #SBATCH --mail-user=wyyadd@gmail.com
 #SBATCH --mail-type=ALL
 
@@ -24,5 +24,5 @@ srun python3 train_k_gpt.py \
 --num_nodes=$SLURM_NNODES \
 --train_batch_size=8 \
 --val_batch_size=8 \
---test_batch_size=64 \
+--test_batch_size=16 \
 --ckpt_path=""

@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --nodes=4
+#SBATCH --nodes=8
 #SBATCH --ntasks-per-node=4
 #SBATCH --gpus-per-node=a100:4
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=2G
-#SBATCH --time=1-05:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --mail-user=wyyadd@gmail.com
 #SBATCH --mail-type=ALL
 
@@ -15,7 +15,7 @@ source ~/agents/bin/activate
 pip3 install -r requirements.txt
 
 srun python3 train_k_gpt.py \
---mode="test" \
+--mode="val" \
 --root="$project/kGPT/data" \
 --train_processed_dir="$SLURM_TMPDIR/processed" \
 --num_workers=$SLURM_CPUS_PER_TASK \

@@ -52,8 +52,8 @@ if __name__ == '__main__':
     else:
         model = KGPT.load_from_checkpoint(checkpoint_path=args.ckpt_path)
         test_dataset = WaymoSimDataset(root=args.root, split=args.mode, interactive=args.interactive)
-        dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.num_workers,
-                                pin_memory=args.pin_memory, persistent_workers=args.persistent_workers)
+        dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers,
+                                shuffle=False, pin_memory=args.pin_memory, persistent_workers=args.persistent_workers)
         trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices,
                              strategy="ddp", num_nodes=args.num_nodes)
         trainer.test(model, dataloader)

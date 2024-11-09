@@ -4,7 +4,7 @@
 #SBATCH --gpus-per-node=a100:4
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=2G
-#SBATCH --time=1-00:00:00
+#SBATCH --time=1-12:00:00
 #SBATCH --mail-user=wyyadd@gmail.com
 #SBATCH --mail-type=ALL
 

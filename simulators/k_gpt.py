@@ -205,12 +205,26 @@ class KGPT(pl.LightningModule):
                 for j in range(len(eval_id_unbatch[i])):
                     track_predictions[eval_id_unbatch[i][j].item()] = traj_eval_unbatch[i][j].cpu().numpy()
                 self.test_predictions[data['scenario_id'][i]] = track_predictions
+                self.write_test_scenario(data['scenario_id'][i], track_predictions)
         else:
             eval_id = data['agent']['id'][eval_mask]
             track_predictions = dict()
             for i in range(len(eval_id)):
                 track_predictions[eval_id[i].item()] = traj_eval[i].cpu().numpy()
             self.test_predictions[data['scenario_id']] = track_predictions
+            self.write_test_scenario(data['scenario_id'], track_predictions)
+
+    def write_test_scenario(self, scenario_id, scenario):
+        print("scenario_id:", scenario_id)
+        try:
+            scenario_dir = os.path.join(self.submission_dir, "scenarios")
+            if not os.path.isdir(scenario_dir):
+                os.makedirs(scenario_dir)
+            with open(os.path.join(scenario_dir, f'{scenario_id}.pkl'), 'wb') as handle:
+                # noinspection PyTypeChecker
+                pickle.dump({scenario_id: scenario}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        except Exception as e:
+            print(f'Error saving scenario {scenario_id}: {e}')
 
     def on_test_end(self):
         try:

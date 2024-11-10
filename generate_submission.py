@@ -43,7 +43,7 @@ if __name__ == "__main__":
         uses_camera_data=False,
         uses_public_model_pretraining=False,
         public_model_names=["kGPT"],
-        num_model_parameters="4M",
+        num_model_parameters="0.64M",
         acknowledge_complies_with_closed_loop_requirement=True,
         submission_dir=args.submission_dir,
         submission_file_name="submission",

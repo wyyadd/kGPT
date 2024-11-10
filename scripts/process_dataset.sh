@@ -13,7 +13,7 @@ source ~/agents/bin/activate
 
 pip3 install -r requirements.txt
 
-python3 scripts/process_dataset.py \
+python3 process_dataset.py \
 --root="$project/kGPT/data" \
 --train_processed_dir="$SLURM_TMPDIR/processed"
 

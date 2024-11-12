@@ -33,10 +33,9 @@ class SimTargetBuilder(BaseTransform):
                               dim=-2)
 
         t = 0.1
-        #  target: 0-1: acceleration, 2: yaw_rate, scalar, no need rotate
-        data['agent']['target'] = pos.new_zeros(data['agent']['num_nodes'], pos.size(-2), 3)
-        acceleration = (vel[:, 1:, :2] - vel[:, :-1, :2]) / t
-        data['agent']['target'][:, :-1, :2] = (acceleration.unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
-        data['agent']['target'][:, :-1, 2] = wrap_angle(head[:, 1:] - head[:, :-1]) / t
-
+        #  target: 0-3: velocity, 3: yaw_rate, scalar, no need rotate
+        data['agent']['target'] = pos.new_zeros(data['agent']['num_nodes'], pos.size(-2), 4)
+        data['agent']['target'][:, :-1, :2] = (vel[:, 1:, :2].unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
+        data['agent']['target'][:, :-1, 2] = vel[:, 1:, 2]
+        data['agent']['target'][:, :-1, 3] = wrap_angle(head[:, 1:] - head[:, :-1]) / t
         return data

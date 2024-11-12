@@ -18,7 +18,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import Compose
 
 from datasets import WaymoSimDataset
-from transforms import SimAgentFilter
+from transforms import SimAgentFilter, VelocityBuilder
 from transforms import SimTargetBuilder
 
 
@@ -40,9 +40,10 @@ class WaymoSimDataModule(pl.LightningDataModule):
                  train_processed_dir: Optional[str] = None,
                  val_processed_dir: Optional[str] = None,
                  test_processed_dir: Optional[str] = None,
-                 train_transform: Optional[Callable] = Compose([SimAgentFilter(128, 11), SimTargetBuilder()]),
-                 val_transform: Optional[Callable] = SimTargetBuilder(),
-                 test_transform: Optional[Callable] = None,
+                 train_transform: Optional[Callable] = Compose(
+                     [SimAgentFilter(128, 11), VelocityBuilder(), SimTargetBuilder()]),
+                 val_transform: Optional[Callable] = Compose([SimTargetBuilder(), VelocityBuilder()]),
+                 test_transform: Optional[Callable] = VelocityBuilder(),
                  **kwargs) -> None:
         super(WaymoSimDataModule, self).__init__()
         self.train_dataset = None

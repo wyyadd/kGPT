@@ -223,7 +223,7 @@ class WaymoSimDataset(Dataset):
         agent_type = torch.zeros(num_agents, dtype=torch.uint8)
         position = torch.zeros(num_agents, self.num_steps, self.dim, dtype=torch.float)
         heading = torch.zeros(num_agents, self.num_steps, dtype=torch.float)
-        velocity = torch.zeros(num_agents, self.num_steps, self.dim - 1, dtype=torch.float)
+        velocity = torch.zeros(num_agents, self.num_steps, self.dim, dtype=torch.float)
         length = torch.zeros(num_agents, self.num_steps, dtype=torch.float)
         width = torch.zeros(num_agents, self.num_steps, dtype=torch.float)
         height = torch.zeros(num_agents, self.num_steps, dtype=torch.float)

@@ -39,6 +39,7 @@ class KGPT(pl.LightningModule):
                  weight_decay: float,
                  T_max: int,
                  submission_dir: str,
+                 simulation_times: int,
                  **kwargs) -> None:
         super(KGPT, self).__init__()
         self.save_hyperparameters()
@@ -63,7 +64,7 @@ class KGPT(pl.LightningModule):
         self.weight_decay = weight_decay
         self.T_max = T_max
         self.submission_dir = submission_dir
-        self.simulation_times = 2
+        self.simulation_times = simulation_times
 
         self.decoder = KGPTDecoder(
             input_dim=input_dim,

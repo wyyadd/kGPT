@@ -63,7 +63,8 @@ class KGPTDecoder(nn.Module):
         self.x_a_emb = FourierEmbedding(input_dim=input_dim_x_a, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
         self.x_m_emb = FourierEmbedding(input_dim=input_dim_x_m, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
 
-        self.r_emb = FourierEmbedding(input_dim=input_dim_r, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
+        self.r_m2a_emb = FourierEmbedding(input_dim=input_dim_r, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
+        self.r_a2a_emb = FourierEmbedding(input_dim=input_dim_r, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
 
         self.m2a_attn_layers = nn.ModuleList(
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
@@ -136,7 +137,7 @@ class KGPTDecoder(nn.Module):
             [torch.norm(rel_pos_m2a[:, :3], p=2, dim=-1),
              angle_between_3d_vectors(ctr_vector=head_vector_t[edge_index_m2a[1]], nbr_vector=rel_pos_m2a[:, :3]),
              rel_orient_m2a], dim=-1)
-        r_m2a = self.r_emb(continuous_inputs=r_m2a, categorical_embs=None)
+        r_m2a = self.r_m2a_emb(continuous_inputs=r_m2a, categorical_embs=None)
 
         pos_s = pos_a.transpose(0, 1).reshape(-1, self.input_dim)
         head_s = head_a.transpose(0, 1).reshape(-1)
@@ -155,7 +156,7 @@ class KGPTDecoder(nn.Module):
             [torch.norm(rel_pos_a2a[:, :3], p=2, dim=-1),
              angle_between_3d_vectors(ctr_vector=head_vector_s[edge_index_a2a[1]], nbr_vector=rel_pos_a2a[:, :3]),
              rel_head_a2a], dim=-1)
-        r_a2a = self.r_emb(continuous_inputs=r_a2a, categorical_embs=None)
+        r_a2a = self.r_a2a_emb(continuous_inputs=r_a2a, categorical_embs=None)
 
         for i in range(self.num_layers):
             x_a = x_a.reshape(-1, self.hidden_dim)

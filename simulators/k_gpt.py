@@ -63,6 +63,7 @@ class KGPT(pl.LightningModule):
         self.weight_decay = weight_decay
         self.T_max = T_max
         self.submission_dir = submission_dir
+        self.simulation_times = 2
 
         self.decoder = KGPTDecoder(
             input_dim=input_dim,
@@ -153,7 +154,7 @@ class KGPT(pl.LightningModule):
 
         traj_eval = []
         interval = 0.1
-        for k in range(32):
+        for k in range(self.simulation_times):
             for t in range(self.num_rollout_steps):
                 pred = self(data)
                 pi = pred['pi'][:, self.num_init_steps + t - 1]  # [A, K]
@@ -187,6 +188,8 @@ class KGPT(pl.LightningModule):
             traj_eval.append(torch.cat([data['agent']['position'][eval_mask, self.num_init_steps:, :3],
                                         data['agent']['heading'][eval_mask, self.num_init_steps:].unsqueeze(-1)],
                                        dim=-1))
+        traj_eval = traj_eval * (32 // self.simulation_times)
+        assert len(traj_eval) == 32
         traj_eval = torch.stack(traj_eval, dim=1)
         if isinstance(data, Batch):
             eval_id_unbatch = unbatch(src=data['agent']['id'][eval_mask], batch=data['agent']['batch'][eval_mask],

@@ -25,4 +25,6 @@ srun python3 train_k_gpt.py \
 --train_batch_size=8 \
 --val_batch_size=8 \
 --test_batch_size=16 \
+--submission_dir="pkl_files" \
+--simulation_times=32 \
 --ckpt_path=""

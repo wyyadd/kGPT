@@ -71,6 +71,7 @@ class WaymoSimDataset(Dataset):
                  interactive: bool = False,
                  raw_dir: Optional[str] = None,
                  processed_dir: Optional[str] = None,
+                 submission_dir: Optional[str] = None,
                  transform: Optional[Callable] = None,
                  dim: int = 3,
                  num_historical_steps: int = 11,
@@ -124,6 +125,17 @@ class WaymoSimDataset(Dataset):
                                               name.endswith(('pkl', 'pickle'))]
             else:
                 self._processed_file_names = []
+
+        # use to restore from predicted files
+        # no need to generate again
+        self.to_predicted_file_names = []
+        if split != "train" and submission_dir is not None:
+            submission_dir = os.path.join(submission_dir, 'scenarios')
+            if os.path.isdir(submission_dir):
+                self.to_predicted_file_names = {name for name in os.listdir(submission_dir) if
+                                                os.path.isfile(os.path.join(submission_dir, name)) and
+                                                name.endswith(('pkl', 'pickle'))}
+                self.to_predicted_file_names = list(set(self._processed_file_names) - self.to_predicted_file_names)
 
         self.dim = dim
         self.num_historical_steps = num_historical_steps
@@ -186,6 +198,8 @@ class WaymoSimDataset(Dataset):
 
     @property
     def processed_file_names(self) -> Union[str, List[str], Tuple]:
+        if len(self.to_predicted_file_names) > 0:
+            return self.to_predicted_file_names
         return self._processed_file_names
 
     def download(self) -> None:
@@ -518,7 +532,7 @@ class WaymoSimDataset(Dataset):
         }
 
     def len(self) -> int:
-        return self._num_samples
+        return len(self.processed_file_names)
 
     def get(self, idx: int) -> HeteroData:
         with open(self.processed_paths[idx], 'rb') as handle:
@@ -547,7 +561,7 @@ class WaymoSimDataset(Dataset):
 
     def _process(self) -> None:
         # if complete processed files exist, skip processing
-        if os.path.isdir(self.processed_dir) and len(self.processed_file_names) == len(self):
+        if os.path.isdir(self.processed_dir) and len(self._processed_file_names) == self._num_samples:
             return
         print('Processing...', file=sys.stderr)
         if os.path.isdir(self.processed_dir):

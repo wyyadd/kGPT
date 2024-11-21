@@ -32,6 +32,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_processed_dir', type=str, default=None)
     parser.add_argument('--val_processed_dir', type=str, default=None)
     parser.add_argument('--test_processed_dir', type=str, default=None)
+    parser.add_argument('--submission_dir', type=str, default=None)
     parser.add_argument('--accelerator', type=str, default='auto')
     parser.add_argument('--devices', type=int, required=True)
     parser.add_argument('--num_nodes', type=int, default=1)
@@ -53,7 +54,7 @@ if __name__ == '__main__':
         trainer.fit(model, datamodule, ckpt_path=args.ckpt_path)
     else:
         model = KGPT.load_from_checkpoint(checkpoint_path=args.ckpt_path)
-        test_dataset = WaymoSimDataset(root=args.root, split=args.mode,
+        test_dataset = WaymoSimDataset(root=args.root, split=args.mode, submission_dir=args.submission_dir,
                                        interactive=args.interactive, transform=VelocityBuilder())
         dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers,
                                 shuffle=False, pin_memory=args.pin_memory, persistent_workers=args.persistent_workers)

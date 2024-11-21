@@ -200,14 +200,14 @@ class KGPT(pl.LightningModule):
                 track_predictions = dict()
                 for j in range(len(eval_id_unbatch[i])):
                     track_predictions[eval_id_unbatch[i][j].item()] = traj_eval_unbatch[i][j].cpu().numpy()
-                self.test_predictions[data['scenario_id'][i]] = track_predictions
+                # self.test_predictions[data['scenario_id'][i]] = track_predictions
                 self.write_test_scenario(data['scenario_id'][i], track_predictions)
         else:
             eval_id = data['agent']['id'][eval_mask]
             track_predictions = dict()
             for i in range(len(eval_id)):
                 track_predictions[eval_id[i].item()] = traj_eval[i].cpu().numpy()
-            self.test_predictions[data['scenario_id']] = track_predictions
+            # self.test_predictions[data['scenario_id']] = track_predictions
             self.write_test_scenario(data['scenario_id'], track_predictions)
 
     def write_test_scenario(self, scenario_id, scenario):
@@ -216,13 +216,16 @@ class KGPT(pl.LightningModule):
             scenario_dir = os.path.join(self.submission_dir, "scenarios")
             if not os.path.isdir(scenario_dir):
                 os.makedirs(scenario_dir)
-            with open(os.path.join(scenario_dir, f'{scenario_id}.pkl'), 'wb') as handle:
+            # 3MB buffer
+            with open(os.path.join(scenario_dir, f'{scenario_id}.pkl'), 'wb', buffering=3145728) as handle:
                 # noinspection PyTypeChecker
                 pickle.dump({scenario_id: scenario}, handle, protocol=pickle.HIGHEST_PROTOCOL)
         except Exception as e:
             print(f'Error saving scenario {scenario_id}: {e}')
 
     def on_test_end(self):
+        if len(self.test_predictions) == 0:
+            return
         try:
             if not os.path.isdir(self.submission_dir):
                 os.makedirs(self.submission_dir)
@@ -290,5 +293,4 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--lr', type=float, default=5e-4)
         parser.add_argument('--weight_decay', type=float, default=0.1)
         parser.add_argument('--T_max', type=int, default=30)
-        parser.add_argument('--submission_dir', type=str, default='./data/pkl_files')
         return parent_parser

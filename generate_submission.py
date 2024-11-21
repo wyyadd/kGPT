@@ -2,10 +2,17 @@ import glob
 import os
 import pickle
 from argparse import ArgumentParser
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from tqdm import tqdm
 
 from utils import generate_waymo_simulation_submission
+
+
+def load_pickle(pkl_file):
+    with open(pkl_file, 'rb') as handle:
+        prediction = pickle.load(handle)
+    return prediction
 
 
 def load_and_merge_pickles(directory):
@@ -13,11 +20,16 @@ def load_and_merge_pickles(directory):
 
     pkl_files = glob.glob(os.path.join(directory, "*.pkl"))
 
-    for pkl_file in tqdm(pkl_files):
-        with open(pkl_file, 'rb') as handle:
-            prediction = pickle.load(handle)
+    with ProcessPoolExecutor() as executor:
+        futures = []
 
-            merged_prediction.update(prediction)
+        # Submit each scenario to be processed in parallel
+        for pkl_file in pkl_files:
+            futures.append(executor.submit(load_pickle, pkl_file))
+
+        # As the futures are completed, add the results to scenario_rollouts
+        for future in tqdm(as_completed(futures), total=len(futures)):
+            merged_prediction.update(future.result())
 
     return merged_prediction
 

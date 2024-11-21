@@ -20,7 +20,6 @@ from concurrent.futures import as_completed, ProcessPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import tensorflow as tf
 import torch
 from shapely.geometry import Polygon
 from shapely.geometry.polygon import orient
@@ -36,9 +35,6 @@ try:
 except ImportError:
     from protos import scenario_pb2
     from protos import scenario_pb2 as map_pb2
-
-# Hide GPU from visible devices
-tf.config.set_visible_devices([], 'GPU')
 
 
 class WaymoSimDataset(Dataset):
@@ -206,6 +202,7 @@ class WaymoSimDataset(Dataset):
         raise NotImplementedError
 
     def process_single_file(self, raw_file_name: str):
+        import tensorflow as tf
         records = tf.data.TFRecordDataset(os.path.join(self.raw_dir, raw_file_name))
         for record in records:
             scenario = scenario_pb2.Scenario()
@@ -220,6 +217,10 @@ class WaymoSimDataset(Dataset):
                 pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def process(self) -> None:
+        import tensorflow as tf
+        # Hide GPU from visible devices
+        tf.config.set_visible_devices([], 'GPU')
+
         with ProcessPoolExecutor() as executor:
             futures = [executor.submit(self.process_single_file, raw_file_name) for raw_file_name in
                        self.raw_file_names]

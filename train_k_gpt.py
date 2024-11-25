@@ -42,6 +42,7 @@ if __name__ == '__main__':
     parser.add_argument('--simulation_times', type=int, default=32)
     KGPT.add_model_specific_args(parser)
     args = parser.parse_args()
+    print(args)
 
     if args.mode == 'train':
         model = KGPT(**vars(args))

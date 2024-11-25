@@ -18,6 +18,7 @@ from torch_cluster import knn
 from torch_cluster import knn_graph
 from torch_geometric.data import Batch
 from torch_geometric.data import HeteroData
+from torch_geometric.utils import dense_to_sparse
 from torch_geometric.utils import subgraph
 
 from layers.attention_layer import AttentionLayer
@@ -63,9 +64,14 @@ class KGPTDecoder(nn.Module):
         self.x_a_emb = FourierEmbedding(input_dim=input_dim_x_a, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
         self.x_m_emb = FourierEmbedding(input_dim=input_dim_x_m, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
 
+        self.r_t_emb = FourierEmbedding(input_dim=input_dim_r, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
         self.r_m2a_emb = FourierEmbedding(input_dim=input_dim_r, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
         self.r_a2a_emb = FourierEmbedding(input_dim=input_dim_r, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
 
+        self.t_attn_layers = nn.ModuleList(
+            [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
+                            bipartite=False, has_pos_emb=True) for _ in range(num_layers)]
+        )
         self.m2a_attn_layers = nn.ModuleList(
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
                             bipartite=True, has_pos_emb=True) for _ in range(num_layers)]
@@ -120,6 +126,18 @@ class KGPTDecoder(nn.Module):
         head_t = head_a.reshape(-1)
         head_vector_t = head_vector_a.reshape(-1, 3)
 
+        mask_t = mask.unsqueeze(2) & mask.unsqueeze(1)
+        edge_index_t = dense_to_sparse(mask_t)[0]
+        edge_index_t = edge_index_t[:, edge_index_t[1] > edge_index_t[0]]
+        edge_index_t = edge_index_t[:, (edge_index_t[1] - edge_index_t[0]) % 1 == 0]
+        rel_pos_t = pos_t[edge_index_t[0]] - pos_t[edge_index_t[1]]
+        rel_head_t = wrap_angle(head_t[edge_index_t[0]] - head_t[edge_index_t[1]])
+        r_t = torch.stack(
+            [torch.norm(rel_pos_t[:, :2], p=2, dim=-1),
+             angle_between_3d_vectors(ctr_vector=head_vector_t[edge_index_t[1]], nbr_vector=rel_pos_t[:, :3]),
+             rel_head_t], dim=-1)
+        r_t = self.r_t_emb(continuous_inputs=r_t, categorical_embs=None)
+
         mask_t = mask.reshape(-1)
         if isinstance(data, Batch):
             batch_t = data['agent']['batch'].repeat_interleave(self.num_steps)
@@ -160,6 +178,7 @@ class KGPTDecoder(nn.Module):
 
         for i in range(self.num_layers):
             x_a = x_a.reshape(-1, self.hidden_dim)
+            x_a = self.t_attn_layers[i](x_a, r_t, edge_index_t, valid_index=valid_index_t)
             x_a = self.m2a_attn_layers[i]((x_m, x_a), r_m2a, edge_index_m2a, valid_index=(valid_index_m, valid_index_t))
             x_a = x_a.reshape(-1, self.num_steps, self.hidden_dim).transpose(0, 1).reshape(-1, self.hidden_dim)
             x_a = self.a2a_attn_layers[i](x_a, r_a2a, edge_index_a2a, valid_index=valid_index_s)

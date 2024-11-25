@@ -274,7 +274,7 @@ class KGPT(pl.LightningModule):
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group('KGPT')
         parser.add_argument('--input_dim', type=int, default=3)
-        parser.add_argument('--hidden_dim', type=int, default=64)
+        parser.add_argument('--hidden_dim', type=int, default=128)
         parser.add_argument('--pos_dim', type=int, default=3)
         parser.add_argument('--vel_dim', type=int, default=3)
         parser.add_argument('--theta_dim', type=int, default=1)

@@ -184,8 +184,7 @@ class KGPT(pl.LightningModule):
                                                                                        :self.pos_dim] + delta_pos
 
                 # heading
-                data['agent']['heading'][:, self.num_init_steps + t] = wrap_angle(
-                    current_theta + yaw_rate.squeeze(-1) * interval)
+                data['agent']['heading'][:, self.num_init_steps + t] = wrap_angle(current_theta + yaw_rate.squeeze(-1))
             traj_eval.append(torch.cat([data['agent']['position'][eval_mask, self.num_init_steps:, :3],
                                         data['agent']['heading'][eval_mask, self.num_init_steps:].unsqueeze(-1)],
                                        dim=-1))

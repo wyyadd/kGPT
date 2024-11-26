@@ -32,10 +32,9 @@ class SimTargetBuilder(BaseTransform):
                                torch.stack([sin, cos], dim=-1)],
                               dim=-2)
 
-        t = 0.1
         #  target: 0-3: velocity, 3: yaw_rate, scalar, no need rotate
         data['agent']['target'] = pos.new_zeros(data['agent']['num_nodes'], pos.size(-2), 4)
         data['agent']['target'][:, :-1, :2] = (vel[:, 1:, :2].unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
         data['agent']['target'][:, :-1, 2] = vel[:, 1:, 2]
-        data['agent']['target'][:, :-1, 3] = wrap_angle(head[:, 1:] - head[:, :-1]) / t
+        data['agent']['target'][:, :-1, 3] = wrap_angle(head[:, 1:] - head[:, :-1])
         return data

@@ -54,7 +54,10 @@ if __name__ == '__main__':
                              callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs)
         trainer.fit(model, datamodule, ckpt_path=args.ckpt_path)
     else:
-        model = KGPT.load_from_checkpoint(checkpoint_path=args.ckpt_path, simulation_times=args.simulation_times)
+        model = KGPT.load_from_checkpoint(
+            checkpoint_path=args.ckpt_path,
+            simulation_times=args.simulation_times,
+            submission_dir=args.submission_dir)
         test_dataset = WaymoSimDataset(root=args.root, split=args.mode, submission_dir=args.submission_dir,
                                        interactive=args.interactive, transform=VelocityBuilder())
         dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers,

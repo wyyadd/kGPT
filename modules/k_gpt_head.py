@@ -38,8 +38,8 @@ class KGPTHead(nn.Module):
         vel_scale, yaw_scale = scale.split([self.vel_dim * self.num_modes,
                                             self.yaw_dim * self.num_modes], dim=-1)
 
-        # constrain to [-10pi,10pi] same to target
-        yaw_rate = torch.tanh(yaw_rate) * math.pi * 10
+        # constrain to [-pi,pi] same to target
+        yaw_rate = torch.tanh(yaw_rate) * math.pi
         vel_scale = F.elu(vel_scale, alpha=1.0) + 1.0
         yaw_scale = 1.0 / (F.elu(yaw_scale, alpha=1.0) + 1.0 + 1e-4)
 

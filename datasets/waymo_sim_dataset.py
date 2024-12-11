@@ -145,7 +145,7 @@ class WaymoSimDataset(Dataset):
         }[split]
         self._num_samples = {
             'train': 486995,
-            'val': 44097 if not interactive else 43479,
+            'val': 3572 if not interactive else 43479,
             'test': 44920 if not interactive else 44154,
         }[split]
         self._lane_type_dict = {

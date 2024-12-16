@@ -11,5 +11,5 @@ module purge module load python/3.11
 source ~/agents/bin/activate
 
 python3 generate_submission.py \
---root="./data/pkl_files" \
---submission_dir="./data/sub"
+--root="./data/pkl_files/scenarios" \
+--submission_dir="./data/pkl_files/sub"

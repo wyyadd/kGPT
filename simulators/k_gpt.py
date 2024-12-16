@@ -283,7 +283,7 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--num_init_steps', type=int, default=11)
         parser.add_argument('--num_rollout_steps', type=int, default=80)
         parser.add_argument('--num_m2a_nbrs', type=int, default=32)
-        parser.add_argument('--num_a2a_nbrs', type=int, default=16)
+        parser.add_argument('--num_a2a_nbrs', type=int, default=32)
         parser.add_argument('--num_freq_bands', type=int, default=64)
         parser.add_argument('--num_layers', type=int, default=2)
         parser.add_argument('--num_heads', type=int, default=8)

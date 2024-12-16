@@ -23,7 +23,7 @@ from torch_geometric.utils import subgraph
 
 from layers.attention_layer import AttentionLayer
 from layers.fourier_embedding import FourierEmbedding
-from utils import angle_between_3d_vectors
+from utils import angle_between_2d_vectors
 from utils import weight_init
 from utils import wrap_angle
 
@@ -57,7 +57,7 @@ class KGPTDecoder(nn.Module):
         num_map_types = 17
         input_dim_x_a = 5
         input_dim_x_m = input_dim - 1
-        input_dim_r = input_dim
+        input_dim_r = input_dim + 1
 
         self.type_a_emb = nn.Embedding(num_agent_types, hidden_dim)
         self.type_m_emb = nn.Embedding(num_map_types, hidden_dim)
@@ -87,7 +87,7 @@ class KGPTDecoder(nn.Module):
         mask = data['agent']['valid_mask'][:, :self.num_steps].contiguous()
         pos_a = data['agent']['position'][:, :self.num_steps, :self.input_dim].contiguous()
         head_a = data['agent']['heading'][:, :self.num_steps].contiguous()
-        head_vector_a = torch.stack([head_a.cos(), head_a.sin(), torch.zeros_like(head_a)], dim=-1)
+        head_vector_a = torch.stack([head_a.cos(), head_a.sin()], dim=-1)
         pos_m = data['map_point']['position'][:, :self.input_dim].contiguous()
         orient_m = data['map_point']['orientation'].contiguous()
 
@@ -97,8 +97,8 @@ class KGPTDecoder(nn.Module):
         height = data['agent']['height'][:, :self.num_steps].contiguous()
 
         x_a = torch.stack(
-            [torch.norm(vel[:, :, :3], p=2, dim=-1),
-             angle_between_3d_vectors(ctr_vector=head_vector_a, nbr_vector=vel[:, :, :3]),
+            [torch.norm(vel[:, :, :2], p=2, dim=-1),
+             angle_between_2d_vectors(ctr_vector=head_vector_a, nbr_vector=vel[:, :, :2]),
              length,
              width,
              height], dim=-1)
@@ -124,7 +124,7 @@ class KGPTDecoder(nn.Module):
 
         pos_t = pos_a.reshape(-1, self.input_dim)
         head_t = head_a.reshape(-1)
-        head_vector_t = head_vector_a.reshape(-1, 3)
+        head_vector_t = head_vector_a.reshape(-1, 2)
 
         mask_t = mask.unsqueeze(2) & mask.unsqueeze(1)
         edge_index_t = dense_to_sparse(mask_t)[0]
@@ -134,7 +134,8 @@ class KGPTDecoder(nn.Module):
         rel_head_t = wrap_angle(head_t[edge_index_t[0]] - head_t[edge_index_t[1]])
         r_t = torch.stack(
             [torch.norm(rel_pos_t[:, :2], p=2, dim=-1),
-             angle_between_3d_vectors(ctr_vector=head_vector_t[edge_index_t[1]], nbr_vector=rel_pos_t[:, :3]),
+             angle_between_2d_vectors(ctr_vector=head_vector_t[edge_index_t[1]], nbr_vector=rel_pos_t[:, :2]),
+             rel_pos_t[:, -1],
              rel_head_t], dim=-1)
         r_t = self.r_t_emb(continuous_inputs=r_t, categorical_embs=None)
 
@@ -145,34 +146,36 @@ class KGPTDecoder(nn.Module):
         else:
             batch_t = pos_t.new_zeros(data['agent']['num_nodes'] * self.num_steps, dtype=torch.long)
             batch_m = pos_m.new_zeros(data['map_point']['num_nodes'], dtype=torch.long)
-        edge_index_m2a = knn(x=pos_m[:, :3], y=pos_t[:, :3], k=self.num_m2a_nbrs, batch_x=batch_m, batch_y=batch_t)
+        edge_index_m2a = knn(x=pos_m[:, :2], y=pos_t[:, :2], k=self.num_m2a_nbrs, batch_x=batch_m, batch_y=batch_t)
         edge_index_m2a = edge_index_m2a[[1, 0]]
         edge_index_m2a = edge_index_m2a[:, mask_t[edge_index_m2a[1]]]
         valid_index_m = edge_index_m2a[0].unique()
         rel_pos_m2a = pos_m[edge_index_m2a[0]] - pos_t[edge_index_m2a[1]]
         rel_orient_m2a = wrap_angle(orient_m[edge_index_m2a[0]] - head_t[edge_index_m2a[1]])
         r_m2a = torch.stack(
-            [torch.norm(rel_pos_m2a[:, :3], p=2, dim=-1),
-             angle_between_3d_vectors(ctr_vector=head_vector_t[edge_index_m2a[1]], nbr_vector=rel_pos_m2a[:, :3]),
+            [torch.norm(rel_pos_m2a[:, :2], p=2, dim=-1),
+             angle_between_2d_vectors(ctr_vector=head_vector_t[edge_index_m2a[1]], nbr_vector=rel_pos_m2a[:, :2]),
+             rel_pos_m2a[:, -1],
              rel_orient_m2a], dim=-1)
         r_m2a = self.r_m2a_emb(continuous_inputs=r_m2a, categorical_embs=None)
 
         pos_s = pos_a.transpose(0, 1).reshape(-1, self.input_dim)
         head_s = head_a.transpose(0, 1).reshape(-1)
-        head_vector_s = head_vector_a.transpose(0, 1).reshape(-1, 3)
+        head_vector_s = head_vector_a.transpose(0, 1).reshape(-1, 2)
         mask_s = mask.transpose(0, 1).reshape(-1)
         valid_index_s = torch.where(mask_s)[0]
         if isinstance(data, Batch):
             batch_s = torch.cat([data['agent']['batch'] + data.num_graphs * t for t in range(self.num_steps)], dim=0)
         else:
             batch_s = torch.arange(self.num_steps, device=pos_a.device).repeat_interleave(data['agent']['num_nodes'])
-        edge_index_a2a = knn_graph(x=pos_s[:, :3], k=self.num_a2a_nbrs, batch=batch_s, loop=False)
+        edge_index_a2a = knn_graph(x=pos_s[:, :2], k=self.num_a2a_nbrs, batch=batch_s, loop=False)
         edge_index_a2a = subgraph(subset=mask_s, edge_index=edge_index_a2a)[0]
         rel_pos_a2a = pos_s[edge_index_a2a[0]] - pos_s[edge_index_a2a[1]]
         rel_head_a2a = wrap_angle(head_s[edge_index_a2a[0]] - head_s[edge_index_a2a[1]])
         r_a2a = torch.stack(
-            [torch.norm(rel_pos_a2a[:, :3], p=2, dim=-1),
-             angle_between_3d_vectors(ctr_vector=head_vector_s[edge_index_a2a[1]], nbr_vector=rel_pos_a2a[:, :3]),
+            [torch.norm(rel_pos_a2a[:, :2], p=2, dim=-1),
+             angle_between_2d_vectors(ctr_vector=head_vector_s[edge_index_a2a[1]], nbr_vector=rel_pos_a2a[:, :2]),
+             rel_pos_a2a[:, -1],
              rel_head_a2a], dim=-1)
         r_a2a = self.r_a2a_emb(continuous_inputs=r_a2a, categorical_embs=None)
 

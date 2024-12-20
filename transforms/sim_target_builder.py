@@ -20,8 +20,9 @@ from utils import wrap_angle
 
 class SimTargetBuilder(BaseTransform):
 
-    def __init__(self) -> None:
+    def __init__(self, patch: int = 10) -> None:
         super().__init__()
+        self.patch = patch
 
     def __call__(self, data: HeteroData) -> HeteroData:
         pos = data['agent']['position']
@@ -32,9 +33,12 @@ class SimTargetBuilder(BaseTransform):
                                torch.stack([sin, cos], dim=-1)],
                               dim=-2)
 
-        #  target: 0-3: velocity, 3: yaw_rate, scalar, no need rotate
-        data['agent']['target'] = pos.new_zeros(data['agent']['num_nodes'], pos.size(-2), 4)
-        data['agent']['target'][:, :-1, :2] = (vel[:, 1:, :2].unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
-        data['agent']['target'][:, :-1, 2] = vel[:, 1:, 2]
-        data['agent']['target'][:, :-1, 3] = wrap_angle(head[:, 1:] - head[:, :-1])
+        # num_agent, steps, patch_size, 4
+        data['agent']['target'] = pos.new_zeros(data['agent']['num_nodes'], pos.size(-2), self.patch, 4)
+        for t in range(self.patch):
+            #  target: 0-3: velocity, 3: yaw_rate, scalar, no need rotate
+            data['agent']['target'][:, :-t - 1, t, :2] = (vel[:, t + 1:, :2].unsqueeze(-2) @
+                                                          rot_mat[:, :-t - 1]).squeeze(-2)
+            data['agent']['target'][:, :-t - 1, t, 2] = vel[:, t + 1:, 2]
+            data['agent']['target'][:, :-t - 1, t, 3] = wrap_angle(head[:, t + 1:] - head[:, :-t - 1])
         return data

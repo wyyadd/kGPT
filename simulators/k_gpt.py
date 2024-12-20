@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch_geometric.data import Batch
 from torch_geometric.data import HeteroData
 
-from losses import MixtureNLLLoss
+from losses import MixtureNLLLoss, NLLLoss
 from modules import KGPTDecoder
 from modules.k_gpt_head import KGPTHead
 from utils import unbatch
@@ -40,6 +40,7 @@ class KGPT(pl.LightningModule):
                  T_max: int,
                  submission_dir: str,
                  simulation_times: int,
+                 patch_size: int,
                  **kwargs) -> None:
         super(KGPT, self).__init__()
         self.save_hyperparameters()
@@ -65,6 +66,7 @@ class KGPT(pl.LightningModule):
         self.T_max = T_max
         self.submission_dir = submission_dir
         self.simulation_times = simulation_times
+        self.patch_size = patch_size
 
         self.decoder = KGPTDecoder(
             input_dim=input_dim,
@@ -77,17 +79,22 @@ class KGPT(pl.LightningModule):
             num_heads=num_heads,
             head_dim=head_dim,
             dropout=dropout,
+            patch_size=patch_size,
         )
         self.head = KGPTHead(
             hidden_dim=hidden_dim,
             num_modes=num_modes,
             vel_dim=vel_dim,
             yaw_rate_dim=yaw_rate_dim,
+            patch_size=patch_size,
         )
 
-        self.loss = MixtureNLLLoss(component_distribution=['laplace'] * self.vel_dim +
-                                                          ['von_mises'] * self.yaw_rate_dim,
-                                   reduction='none')
+        if num_modes == 1:
+            self.loss = NLLLoss(component_distribution=['laplace'] * vel_dim + ['von_mises'] * yaw_rate_dim,
+                                reduction='none')
+        else:
+            self.loss = MixtureNLLLoss(component_distribution=['laplace'] * vel_dim + ['von_mises'] * yaw_rate_dim,
+                                       reduction='none')
         self.test_predictions = dict()
 
     def forward(self, data: HeteroData):
@@ -98,23 +105,31 @@ class KGPT(pl.LightningModule):
                       data,
                       batch_idx):
         valid_mask = data['agent']['valid_mask'][:, :self.num_steps]
-        predict_mask = torch.zeros_like(valid_mask)
-        predict_mask[:, :-1] = valid_mask[:, :-1] & valid_mask[:, 1:]
+        predict_mask = torch.zeros_like(valid_mask).unsqueeze(-1).repeat(1, 1, self.patch_size)
+        for t in range(self.patch_size):
+            predict_mask[:, :-t - 1, t] = valid_mask[:, :-t - 1] & valid_mask[:, t + 1:]
         # Due to the limitation of the Waymo Open Sim Agents Challenge, we fix the bbox size
         data['agent']['length'] = data['agent']['length'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
         data['agent']['width'] = data['agent']['width'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
         data['agent']['height'] = data['agent']['height'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
         pred = self(data)
         pi = pred['pi']
-        pred = torch.cat([pred['vel'], pred['yaw_rate'], pred['vel_scale'], pred['yaw_scale']], dim=-1)
-        target = data['agent']['target'][:, :self.num_steps]
+        pred = torch.cat([
+            pred['vel'], pred['yaw_rate'],
+            pred['vel_scale'], pred['yaw_scale']], dim=-1)
+        target = torch.cat([
+            data['agent']['target'][:, :self.num_steps, :, :self.vel_dim],
+            data['agent']['target'][:, :self.num_steps, :, -self.yaw_rate_dim:]], dim=-1)
 
-        loss = self.loss(pred=pred.reshape(-1, self.num_modes, pred.size(-1)),
-                         target=target.reshape(-1, target.size(-1)),
-                         prob=pi.reshape(-1, pi.size(-1)),
-                         mask=predict_mask.reshape(-1)).reshape(-1, self.num_steps)
-
-        loss = loss[predict_mask].mean()
+        if self.num_modes == 1:
+            loss = self.loss(pred, target.unsqueeze(-3)).sum(dim=(-3, -2, -1))
+        else:
+            loss = self.loss(pred=pred.reshape(-1, self.num_modes, self.patch_size, pred.size(-1)),
+                             target=target.reshape(-1, self.patch_size, target.size(-1)),
+                             prob=pi.reshape(-1, pi.size(-1)),
+                             mask=predict_mask.reshape(-1, self.patch_size)).reshape(-1, self.num_steps)
+        loss = loss / predict_mask.sum(dim=-1).clamp(min=1)
+        loss = loss[predict_mask.any(dim=-1)].mean()
         self.log('train_loss', loss, prog_bar=True, on_step=True, on_epoch=True, batch_size=1)
         return loss
 
@@ -122,23 +137,33 @@ class KGPT(pl.LightningModule):
                         data,
                         batch_idx):
         valid_mask = data['agent']['valid_mask'][:, :self.num_steps]
-        predict_mask = torch.zeros_like(valid_mask)
-        predict_mask[:, :-1] = valid_mask[:, :-1] & valid_mask[:, 1:]
+        predict_mask = torch.zeros_like(valid_mask).unsqueeze(-1).repeat(1, 1, self.patch_size)
+        for t in range(self.patch_size):
+            predict_mask[:, :-t - 1, t] = valid_mask[:, :-t - 1] & valid_mask[:, t + 1:]
         # Due to the limitation of the Waymo Open Sim Agents Challenge, we fix the bbox size
         data['agent']['length'] = data['agent']['length'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
         data['agent']['width'] = data['agent']['width'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
         data['agent']['height'] = data['agent']['height'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
         pred = self(data)
         pi = pred['pi']
-        pred = torch.cat([pred['vel'], pred['yaw_rate'], pred['vel_scale'], pred['yaw_scale']], dim=-1)
-        target = data['agent']['target'][:, :self.num_steps]
+        pred = torch.cat([
+            pred['vel'],
+            pred['yaw_rate'],
+            pred['vel_scale'],
+            pred['yaw_scale']], dim=-1)
+        target = torch.cat([
+            data['agent']['target'][:, :self.num_steps, :, :self.vel_dim],
+            data['agent']['target'][:, :self.num_steps, :, -self.yaw_rate_dim:]], dim=-1)
 
-        loss = self.loss(pred=pred.reshape(-1, self.num_modes, pred.size(-1)),
-                         target=target.reshape(-1, target.size(-1)),
-                         prob=pi.reshape(-1, pi.size(-1)),
-                         mask=predict_mask.reshape(-1)).reshape(-1, self.num_steps)
-
-        loss = loss[predict_mask].mean()
+        if self.num_modes == 1:
+            loss = self.loss(pred, target.unsqueeze(-3)).sum(dim=(-3, -2, -1))
+        else:
+            loss = self.loss(pred=pred.reshape(-1, self.num_modes, self.patch_size, pred.size(-1)),
+                             target=target.reshape(-1, self.patch_size, target.size(-1)),
+                             prob=pi.reshape(-1, pi.size(-1)),
+                             mask=predict_mask.reshape(-1, self.patch_size)).reshape(-1, self.num_steps)
+        loss = loss / predict_mask.sum(dim=-1).clamp(min=1)
+        loss = loss[predict_mask.any(dim=-1)].mean()
         self.log('val_loss', loss, prog_bar=True, on_step=False, on_epoch=True, batch_size=1, sync_dist=True)
 
     def test_step(self,
@@ -292,4 +317,5 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--lr', type=float, default=5e-4)
         parser.add_argument('--weight_decay', type=float, default=0.1)
         parser.add_argument('--T_max', type=int, default=30)
+        parser.add_argument('--patch_size', type=int, default=10)
         return parent_parser

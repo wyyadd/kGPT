@@ -40,7 +40,8 @@ class KGPTDecoder(nn.Module):
                  num_layers: int,
                  num_heads: int,
                  head_dim: int,
-                 dropout: float) -> None:
+                 dropout: float,
+                 patch_size: int) -> None:
         super(KGPTDecoder, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -57,17 +58,22 @@ class KGPTDecoder(nn.Module):
         num_map_types = 17
         input_dim_x_a = 5
         input_dim_x_m = input_dim - 1
+        input_dim_t = input_dim + 2
         input_dim_r = input_dim + 1
+        self.patch_size = patch_size
 
         self.type_a_emb = nn.Embedding(num_agent_types, hidden_dim)
         self.type_m_emb = nn.Embedding(num_map_types, hidden_dim)
         self.x_a_emb = FourierEmbedding(input_dim=input_dim_x_a, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
         self.x_m_emb = FourierEmbedding(input_dim=input_dim_x_m, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
 
-        self.r_t_emb = FourierEmbedding(input_dim=input_dim_r, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
+        self.r_patch_emb = FourierEmbedding(input_dim=input_dim_t, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
+        self.r_t_emb = FourierEmbedding(input_dim=input_dim_t, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
         self.r_m2a_emb = FourierEmbedding(input_dim=input_dim_r, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
         self.r_a2a_emb = FourierEmbedding(input_dim=input_dim_r, hidden_dim=hidden_dim, num_freq_bands=num_freq_bands)
 
+        self.to_patch = AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
+                                       bipartite=False, has_pos_emb=True)
         self.t_attn_layers = nn.ModuleList(
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
                             bipartite=False, has_pos_emb=True) for _ in range(num_layers)]
@@ -129,14 +135,26 @@ class KGPTDecoder(nn.Module):
         mask_t = mask.unsqueeze(2) & mask.unsqueeze(1)
         edge_index_t = dense_to_sparse(mask_t)[0]
         edge_index_t = edge_index_t[:, edge_index_t[1] > edge_index_t[0]]
-        edge_index_t = edge_index_t[:, (edge_index_t[1] - edge_index_t[0]) % 1 == 0]
+        edge_index_patch = edge_index_t[:, edge_index_t[1] - edge_index_t[0] < self.patch_size]
+        rel_pos_patch = pos_t[edge_index_patch[0]] - pos_t[edge_index_patch[1]]
+        rel_head_patch = wrap_angle(head_t[edge_index_patch[0]] - head_t[edge_index_patch[1]])
+        r_patch = torch.stack(
+            [torch.norm(rel_pos_patch[:, :2], p=2, dim=-1),
+             angle_between_2d_vectors(ctr_vector=head_vector_t[edge_index_patch[1]], nbr_vector=rel_pos_patch[:, :2]),
+             rel_pos_patch[:, -1],
+             rel_head_patch,
+             edge_index_patch[0] - edge_index_patch[1]], dim=-1)
+        r_patch = self.r_patch_emb(continuous_inputs=r_patch, categorical_embs=None)
+
+        edge_index_t = edge_index_t[:, (edge_index_t[1] - edge_index_t[0]) % self.patch_size == 0]
         rel_pos_t = pos_t[edge_index_t[0]] - pos_t[edge_index_t[1]]
         rel_head_t = wrap_angle(head_t[edge_index_t[0]] - head_t[edge_index_t[1]])
         r_t = torch.stack(
             [torch.norm(rel_pos_t[:, :2], p=2, dim=-1),
              angle_between_2d_vectors(ctr_vector=head_vector_t[edge_index_t[1]], nbr_vector=rel_pos_t[:, :2]),
              rel_pos_t[:, -1],
-             rel_head_t], dim=-1)
+             rel_head_t,
+             edge_index_t[0] - edge_index_t[1]], dim=-1)
         r_t = self.r_t_emb(continuous_inputs=r_t, categorical_embs=None)
 
         mask_t = mask.reshape(-1)
@@ -179,6 +197,8 @@ class KGPTDecoder(nn.Module):
              rel_head_a2a], dim=-1)
         r_a2a = self.r_a2a_emb(continuous_inputs=r_a2a, categorical_embs=None)
 
+        x_a = x_a.reshape(-1, self.hidden_dim)
+        x_a = self.to_patch(x_a, r_patch, edge_index_patch, valid_index=valid_index_t)
         for i in range(self.num_layers):
             x_a = x_a.reshape(-1, self.hidden_dim)
             x_a = self.t_attn_layers[i](x_a, r_t, edge_index_t, valid_index=valid_index_t)

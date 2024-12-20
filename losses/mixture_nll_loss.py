@@ -58,7 +58,7 @@ class MixtureNLLLoss(nn.Module):
                 dim=-1)
         else:
             nll = self.nll_loss(pred=pred, target=target.unsqueeze(1))
-        nll = (nll * mask.view(-1, 1, 1)).sum(dim=-1)
+        nll = (nll * mask.view(-1, 1, target.size(-2), 1)).sum(dim=(-2, -1))
         if joint:
             if ptr is None:
                 nll = nll.sum(dim=0, keepdim=True)

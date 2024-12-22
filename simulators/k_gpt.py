@@ -204,7 +204,7 @@ class KGPT(pl.LightningModule):
 
                 # position
                 vel_old = data['agent']['velocity'][:, start_steps - 1:end_steps - 1, :self.vel_dim]
-                delta_pos = (vel + vel_old) * interval / 2
+                delta_pos = ((vel + vel_old) * interval / 2).cumsum(axis=1)
                 data['agent']['position'][:, start_steps:end_steps, :self.pos_dim] = data['agent']['position'][:,
                                                                                      [start_steps - 1],
                                                                                      :self.pos_dim] + delta_pos

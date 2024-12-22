@@ -147,10 +147,8 @@ class KGPT(pl.LightningModule):
         pred = self(data)
         pi = pred['pi']
         pred = torch.cat([
-            pred['vel'],
-            pred['yaw_rate'],
-            pred['vel_scale'],
-            pred['yaw_scale']], dim=-1)
+            pred['vel'], pred['yaw_rate'],
+            pred['vel_scale'], pred['yaw_scale']], dim=-1)
         target = torch.cat([
             data['agent']['target'][:, :self.num_steps, :, :self.vel_dim],
             data['agent']['target'][:, :self.num_steps, :, -self.yaw_rate_dim:]], dim=-1)
@@ -180,36 +178,40 @@ class KGPT(pl.LightningModule):
 
         traj_eval = []
         interval = 0.1
+        num_action_steps = self.patch_size
         for k in range(self.simulation_times):
-            for t in range(self.num_rollout_steps):
+            for t in range(self.num_rollout_steps // num_action_steps):
+                start_steps = self.num_init_steps + t * num_action_steps
+                end_steps = start_steps + num_action_steps
                 pred = self(data)
-                pi = pred['pi'][:, self.num_init_steps + t - 1]  # [A, K]
+                pi = pred['pi'][:, start_steps - 1]  # [A, K]
                 sample_inds = torch.multinomial(F.softmax(pi, dim=-1), num_samples=1, replacement=True).squeeze(-1)
                 # sample_inds = top_p_sampling(pi, 0.95)
-                vel = pred['vel'][torch.arange(pi.size(0)), self.num_init_steps + t - 1,
-                      sample_inds, :self.vel_dim]
-                yaw_rate = pred['yaw_rate'][torch.arange(pi.size(0)), self.num_init_steps + t - 1,
-                           sample_inds, :self.yaw_rate_dim]
+                vel = pred['vel'][torch.arange(pi.size(0)), start_steps - 1, sample_inds, :num_action_steps,
+                      :self.vel_dim]
+                yaw_rate = pred['yaw_rate'][torch.arange(pi.size(0)), start_steps - 1, sample_inds, :num_action_steps,
+                           :self.yaw_rate_dim]
 
                 # Transform to global coordinates
-                current_theta = data['agent']['heading'][:, self.num_init_steps + t - 1]
+                current_theta = data['agent']['heading'][:, start_steps - 1]
                 cos, sin = current_theta.cos(), current_theta.sin()
                 rot_mat = torch.stack([torch.stack([cos, sin], dim=-1),
                                        torch.stack([-sin, cos], dim=-1)], dim=-2)
 
                 # velocity
-                vel[:, :2] = (vel[:, :2].unsqueeze(-2) @ rot_mat).squeeze(-2)
-                data['agent']['velocity'][:, self.num_init_steps + t, :self.vel_dim] = vel[..., :self.vel_dim]
+                vel[..., :2] = vel[..., :2] @ rot_mat
+                data['agent']['velocity'][:, start_steps: end_steps, :self.vel_dim] = vel[..., :self.vel_dim]
 
                 # position
-                vel_old = data['agent']['velocity'][:, self.num_init_steps + t - 1, :self.vel_dim]
+                vel_old = data['agent']['velocity'][:, start_steps - 1:end_steps - 1, :self.vel_dim]
                 delta_pos = (vel + vel_old) * interval / 2
-                data['agent']['position'][:, self.num_init_steps + t, :self.pos_dim] = data['agent']['position'][:,
-                                                                                       self.num_init_steps + t - 1,
-                                                                                       :self.pos_dim] + delta_pos
+                data['agent']['position'][:, start_steps:end_steps, :self.pos_dim] = data['agent']['position'][:,
+                                                                                     [start_steps - 1],
+                                                                                     :self.pos_dim] + delta_pos
 
                 # heading
-                data['agent']['heading'][:, self.num_init_steps + t] = wrap_angle(current_theta + yaw_rate.squeeze(-1))
+                data['agent']['heading'][:, start_steps:end_steps] = wrap_angle(
+                    current_theta.unsqueeze(-1) + yaw_rate[..., 0])
             traj_eval.append(torch.cat([data['agent']['position'][eval_mask, self.num_init_steps:, :3],
                                         data['agent']['heading'][eval_mask, self.num_init_steps:].unsqueeze(-1)],
                                        dim=-1))

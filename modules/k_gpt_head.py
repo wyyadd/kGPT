@@ -23,8 +23,7 @@ class KGPTHead(nn.Module):
         self.yaw_dim = yaw_rate_dim
         self.patch_size = patch_size
 
-        self.to_next_patch = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim,
-                                      output_dim=hidden_dim * self.patch_size)
+        self.to_next_patch = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim, output_dim=hidden_dim * patch_size)
         self.to_pi = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim, output_dim=num_modes)
         self.to_control_action = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim,
                                           output_dim=(vel_dim + yaw_rate_dim) * num_modes)

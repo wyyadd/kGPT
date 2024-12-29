@@ -7,7 +7,7 @@ from tqdm import tqdm
 from utils import compute_ade
 
 if __name__ == "__main__":
-    predicted_folder = "./data/ab_o/scenarios"
+    predicted_folder = "./data//scenarios"
     target_folder = "./data/validation/processed"
 
     total_ade = torch.tensor([])

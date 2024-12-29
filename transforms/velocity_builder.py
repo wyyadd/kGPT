@@ -14,8 +14,8 @@ class VelocityBuilder(BaseTransform):
         # generate new velocity
         # [num_nodes, steps, vel_dimension-x,y,z]
         new_vel = vel.new_zeros(data['agent']['num_nodes'], pos.size(-2), 3)
-        new_vel[:, 1:] = (pos[:, 1:] - pos[:, :-1]) / t
-        new_vel[:, 0, :2] = vel[:, 0, :2]
+        new_vel[..., :2] = vel[..., :2]
+        new_vel[:, 1:, 2] = (pos[:, 1:, 2] - pos[:, :-1, 2]) / t
         new_vel[:, 0, 2] = new_vel[:, 1, 2]
         data['agent']['velocity'] = new_vel
 

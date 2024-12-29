@@ -59,7 +59,7 @@ if __name__ == '__main__':
             simulation_times=args.simulation_times,
             submission_dir=args.submission_dir)
         test_dataset = WaymoSimDataset(root=args.root, split=args.mode, submission_dir=args.submission_dir,
-                                       interactive=args.interactive, transform=VelocityBuilder())
+                                       interactive=args.interactive)
         dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers,
                                 shuffle=False, pin_memory=args.pin_memory, persistent_workers=args.persistent_workers)
         trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices,

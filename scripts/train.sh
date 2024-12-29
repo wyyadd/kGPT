@@ -4,7 +4,7 @@
 #SBATCH --gpus-per-node=a100:4
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=2G
-#SBATCH --time=1-12:00:00
+#SBATCH --time=2-12:00:00
 #SBATCH --mail-user=wyyadd@gmail.com
 #SBATCH --mail-type=ALL
 
@@ -25,7 +25,7 @@ srun python3 train_k_gpt.py \
 --accelerator="auto" \
 --devices=-1 \
 --num_nodes=$SLURM_NNODES \
---train_batch_size=8 \
---val_batch_size=8 \
---test_batch_size=16 \
---lr=2e-3
+--train_batch_size=2 \
+--val_batch_size=2 \
+--test_batch_size=6 \
+--lr=1e-3

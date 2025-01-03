@@ -54,12 +54,12 @@ class KGPTDecoder(nn.Module):
         self.head_dim = head_dim
         self.dropout = dropout
 
-        num_agent_types = 5
+        num_agent_types = 6
         num_map_types = 17
-        input_dim_x_a = 5
-        input_dim_x_m = input_dim - 1
-        input_dim_t = input_dim + 2
-        input_dim_r = input_dim + 1
+        input_dim_x_a = 6
+        input_dim_x_m = 2
+        input_dim_t = 5
+        input_dim_r = 4
         self.patch_size = patch_size
 
         self.type_a_emb = nn.Embedding(num_agent_types, hidden_dim)
@@ -86,6 +86,11 @@ class KGPTDecoder(nn.Module):
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
                             bipartite=False, has_pos_emb=True) for _ in range(num_layers)]
         )
+        self.unpack_patch = AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim,
+                                           dropout=dropout, bipartite=False, has_pos_emb=True)
+        self.h_norm = nn.RMSNorm(hidden_dim)
+        self.out_norm = nn.RMSNorm(hidden_dim)
+        self.to_out = nn.Linear(hidden_dim * 2, hidden_dim)
         self.apply(weight_init)
 
     def forward(self,
@@ -105,6 +110,7 @@ class KGPTDecoder(nn.Module):
         x_a = torch.stack(
             [torch.norm(vel[:, :, :2], p=2, dim=-1),
              angle_between_2d_vectors(ctr_vector=head_vector_a, nbr_vector=vel[:, :, :2]),
+             vel[:, :, -1],
              length,
              width,
              height], dim=-1)
@@ -200,11 +206,17 @@ class KGPTDecoder(nn.Module):
         x_a = x_a.reshape(-1, self.hidden_dim)
         x_a = self.to_patch(x_a, r_patch, edge_index_patch, valid_index=valid_index_t)
         for i in range(self.num_layers):
-            x_a = x_a.reshape(-1, self.hidden_dim)
             x_a = self.t_attn_layers[i](x_a, r_t, edge_index_t, valid_index=valid_index_t)
             x_a = self.m2a_attn_layers[i]((x_m, x_a), r_m2a, edge_index_m2a, valid_index=(valid_index_m, valid_index_t))
             x_a = x_a.reshape(-1, self.num_steps, self.hidden_dim).transpose(0, 1).reshape(-1, self.hidden_dim)
             x_a = self.a2a_attn_layers[i](x_a, r_a2a, edge_index_a2a, valid_index=valid_index_s)
-            x_a = x_a.reshape(self.num_steps, -1, self.hidden_dim).transpose(0, 1)
+            x_a = x_a.reshape(self.num_steps, -1, self.hidden_dim).transpose(0, 1).reshape(-1, self.hidden_dim)
 
-        return x_a
+        # [steps*agents, dim, patch]
+        h = x_a
+        x_a = x_a.unsqueeze(-1)
+        for i in range(self.patch_size - 1):
+            out = self.unpack_patch(h, r_patch, edge_index_patch, valid_index=valid_index_t)
+            h = self.to_out(torch.cat([self.h_norm(h), self.out_norm(out)], dim=-1))
+            x_a = torch.cat([x_a, h.unsqueeze(-1)], dim=-1)
+        return x_a.reshape(-1, self.num_steps, self.hidden_dim, self.patch_size)

@@ -58,7 +58,8 @@ class MixtureNLLLoss(nn.Module):
                 dim=-1)
         else:
             nll = self.nll_loss(pred=pred, target=target.unsqueeze(1))
-        nll = (nll * mask.view(-1, 1, target.size(-2), 1)).sum(dim=(-2, -1))
+        # [agents*steps, patch, modes]
+        nll = (nll * mask.view(-1, 1, target.size(-2), 1)).sum(dim=-1).transpose(-1, -2)
         if joint:
             if ptr is None:
                 nll = nll.sum(dim=0, keepdim=True)
@@ -68,6 +69,7 @@ class MixtureNLLLoss(nn.Module):
             pass
         log_pi = F.log_softmax(prob, dim=-1)
         loss = -torch.logsumexp(log_pi - nll, dim=-1)
+        loss = loss.sum(dim=-1)
         if self.reduction == 'mean':
             return loss.mean()
         elif self.reduction == 'sum':

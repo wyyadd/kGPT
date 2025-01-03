@@ -23,7 +23,6 @@ class KGPTHead(nn.Module):
         self.yaw_dim = yaw_rate_dim
         self.patch_size = patch_size
 
-        self.to_next_patch = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim, output_dim=hidden_dim * patch_size)
         self.to_pi = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim, output_dim=num_modes)
         self.to_control_action = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim,
                                           output_dim=(vel_dim + yaw_rate_dim) * num_modes)
@@ -32,8 +31,8 @@ class KGPTHead(nn.Module):
         self.apply(weight_init)
 
     def forward(self, x_a: torch.Tensor) -> Dict[str, torch.Tensor]:
-        pi = self.to_pi(x_a)
-        next_patch = self.to_next_patch(x_a).reshape(*x_a.shape, self.patch_size)
+        # [agents, steps, patch, modes]
+        pi = self.to_pi(x_a.transpose(-2, -1))
 
         vel = torch.tensor([], device=x_a.device)
         yaw_rate = torch.tensor([], device=x_a.device)
@@ -41,7 +40,7 @@ class KGPTHead(nn.Module):
         yaw_scale = torch.tensor([], device=x_a.device)
 
         for i in range(self.patch_size):
-            h = next_patch[..., i]
+            h = x_a[..., i]
             control_action = self.to_control_action(h).unsqueeze(-2)
             scale = self.to_scale(h).unsqueeze(-2)
 
@@ -60,10 +59,10 @@ class KGPTHead(nn.Module):
             vel_scale = torch.cat([vel_scale, new_vel_scale], dim=-2)
             yaw_scale = torch.cat([yaw_scale, new_yaw_scale], dim=-2)
 
-        vel = vel.reshape(*x_a.shape[:-1], -1, self.num_modes, self.vel_dim).transpose(-3, -2)
-        yaw_rate = yaw_rate.reshape(*x_a.shape[:-1], -1, self.num_modes, self.yaw_dim).transpose(-3, -2)
-        vel_scale = vel_scale.reshape(*x_a.shape[:-1], -1, self.num_modes, self.vel_dim).transpose(-3, -2)
-        yaw_scale = yaw_scale.reshape(*x_a.shape[:-1], -1, self.num_modes, self.yaw_dim).transpose(-3, -2)
+        vel = vel.reshape(*x_a.shape[:2], -1, self.num_modes, self.vel_dim).transpose(-3, -2)
+        yaw_rate = yaw_rate.reshape(*x_a.shape[:2], -1, self.num_modes, self.yaw_dim).transpose(-3, -2)
+        vel_scale = vel_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.vel_dim).transpose(-3, -2)
+        yaw_scale = yaw_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.yaw_dim).transpose(-3, -2)
 
         return {
             "pi": pi,

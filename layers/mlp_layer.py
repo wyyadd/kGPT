@@ -29,7 +29,7 @@ class MLPLayer(nn.Module):
         self.output_dim = output_dim
         self.mlp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
+            nn.RMSNorm(hidden_dim),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, output_dim),
         )

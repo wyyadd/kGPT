@@ -33,26 +33,29 @@ class AttentionLayer(MessagePassing):
                  has_pos_emb: bool,
                  dst_pos_emb: bool = False,
                  activation: str = 'relu',
+                 n_rep: int = 1,
                  **kwargs) -> None:
         super(AttentionLayer, self).__init__(aggr='add', node_dim=0, **kwargs)
-        self.num_heads = num_heads
+        self.num_kv_heads = num_heads
+        self.num_heads = num_heads * n_rep
         self.head_dim = head_dim
         self.has_pos_emb = has_pos_emb
         self.dst_pos_emb = dst_pos_emb
         self.activation = activation
         self.scale = head_dim ** -0.5
+        self.n_rep = n_rep
 
-        self.to_q = nn.Linear(hidden_dim, num_heads * head_dim)
-        self.to_k = nn.Linear(hidden_dim, num_heads * head_dim, bias=False)
-        self.to_v = nn.Linear(hidden_dim, num_heads * head_dim)
+        self.to_q = nn.Linear(hidden_dim, self.num_heads * head_dim)
+        self.to_k = nn.Linear(hidden_dim, self.num_kv_heads * head_dim, bias=False)
+        self.to_v = nn.Linear(hidden_dim, self.num_kv_heads * head_dim)
         if has_pos_emb:
-            self.to_k_r = nn.Linear(hidden_dim, num_heads * head_dim, bias=False)
-            self.to_v_r = nn.Linear(hidden_dim, num_heads * head_dim)
+            self.to_k_r = nn.Linear(hidden_dim, self.num_kv_heads * head_dim, bias=False)
+            self.to_v_r = nn.Linear(hidden_dim, self.num_kv_heads * head_dim)
         if dst_pos_emb:
-            self.to_q_r = nn.Linear(hidden_dim, num_heads * head_dim)
-        self.to_s = nn.Linear(hidden_dim, num_heads * head_dim)
-        self.to_g = nn.Linear(num_heads * head_dim + hidden_dim, num_heads * head_dim)
-        self.to_out = nn.Linear(num_heads * head_dim, hidden_dim)
+            self.to_q_r = nn.Linear(hidden_dim, self.num_heads * head_dim)
+        self.to_s = nn.Linear(hidden_dim, self.num_heads * head_dim)
+        self.to_g = nn.Linear(self.num_heads * head_dim + hidden_dim, self.num_heads * head_dim)
+        self.to_out = nn.Linear(self.num_heads * self.head_dim, hidden_dim)
         self.attn_drop = nn.Dropout(dropout)
         if activation == 'relu':
             self.ff_mlp = nn.Sequential(
@@ -68,19 +71,30 @@ class AttentionLayer(MessagePassing):
         else:
             raise ValueError('{} is not a valid activation function'.format(activation))
         if bipartite:
-            self.attn_prenorm_x_src = nn.LayerNorm(hidden_dim)
-            self.attn_prenorm_x_dst = nn.LayerNorm(hidden_dim)
+            self.attn_prenorm_x_src = nn.RMSNorm(hidden_dim)
+            self.attn_prenorm_x_dst = nn.RMSNorm(hidden_dim)
         else:
-            self.attn_prenorm_x_src = nn.LayerNorm(hidden_dim)
+            self.attn_prenorm_x_src = nn.RMSNorm(hidden_dim)
             self.attn_prenorm_x_dst = self.attn_prenorm_x_src
         if has_pos_emb:
-            self.attn_prenorm_r = nn.LayerNorm(hidden_dim)
+            self.attn_prenorm_r = nn.RMSNorm(hidden_dim)
         if dst_pos_emb:
-            self.attn_prenorm_r_dst = nn.LayerNorm(hidden_dim)
-        self.attn_postnorm = nn.LayerNorm(hidden_dim)
-        self.ff_prenorm = nn.LayerNorm(hidden_dim)
-        self.ff_postnorm = nn.LayerNorm(hidden_dim)
+            self.attn_prenorm_r_dst = nn.RMSNorm(hidden_dim)
+        # self.attn_postnorm = nn.RMSNorm(hidden_dim)
+        # self.ff_postnorm = nn.RMSNorm(hidden_dim)
+        self.ff_prenorm = nn.RMSNorm(hidden_dim)
         self.apply(weight_init)
+
+    def repeat_kv(self, x: torch.Tensor) -> torch.Tensor:
+        """torch.repeat_interleave(x, dim=2, repeats=n_rep)"""
+        bs_slen, n_kv_heads, head_dim = x.shape
+        if self.n_rep == 1:
+            return x
+        return (
+            x[:, :, None, :]
+            .expand(bs_slen, n_kv_heads, self.n_rep, head_dim)
+            .reshape(bs_slen, n_kv_heads * self.n_rep, head_dim)
+        )
 
     def forward(self,
                 x: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]],
@@ -115,15 +129,15 @@ class AttentionLayer(MessagePassing):
             else:
                 r_dst = self.attn_prenorm_r_dst(r_dst[valid_index_dst])
         if valid_index is None:
-            x = x + self.attn_postnorm(self._attn_block(x_src, x_dst, r, r_dst, edge_index, size))
-            x = x + self.ff_postnorm(self._ff_block(self.ff_prenorm(x)))
+            x = x + self._attn_block(x_src, x_dst, r, r_dst, edge_index, size)
+            x = x + self._ff_block(self.ff_prenorm(x))
         else:
-            x_valid = x[valid_index_dst] + self.attn_postnorm(
-                self._attn_block(x_src, x_dst, r, r_dst, edge_index, size, valid_index_src, valid_index_dst))
+            x_valid = x[valid_index_dst] + self._attn_block(
+                x_src, x_dst, r, r_dst, edge_index, size, valid_index_src, valid_index_dst)
             x = torch.zeros_like(x).scatter_(
                 dim=0,
                 index=valid_index_dst.unsqueeze(-1).repeat(1, x.size(-1)),
-                src=x_valid + self.ff_postnorm(self._ff_block(self.ff_prenorm(x_valid))),
+                src=x_valid + self._ff_block(self.ff_prenorm(x_valid)),
             )
         return x
 
@@ -135,8 +149,10 @@ class AttentionLayer(MessagePassing):
                 index: Optional[torch.Tensor],
                 ptr: Optional[torch.Tensor]) -> torch.Tensor:
         if self.has_pos_emb and r is not None:
-            k_j = k_j + self.to_k_r(r).view(-1, self.num_heads, self.head_dim)
-            v_j = v_j + self.to_v_r(r).view(-1, self.num_heads, self.head_dim)
+            k_j = k_j + self.to_k_r(r).view(-1, self.num_kv_heads, self.head_dim)
+            v_j = v_j + self.to_v_r(r).view(-1, self.num_kv_heads, self.head_dim)
+        k_j = self.repeat_kv(k_j)
+        v_j = self.repeat_kv(v_j)
         sim = (q_i * k_j).sum(dim=-1) * self.scale
         attn = softmax(sim, index, ptr)
         attn = self.attn_drop(attn)
@@ -191,11 +207,11 @@ class AttentionLayer(MessagePassing):
                 src=q,
             )
         q = q.view(-1, self.num_heads, self.head_dim)
-        k = k.view(-1, self.num_heads, self.head_dim)
-        v = v.view(-1, self.num_heads, self.head_dim)
+        k = k.view(-1, self.num_kv_heads, self.head_dim)
+        v = v.view(-1, self.num_kv_heads, self.head_dim)
         # propagate_type: (x_dst: torch.Tensor, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, r: Optional[torch.Tensor], valid_index_dst: Optional[torch.Tensor])
-        agg = self.propagate(edge_index=edge_index, x_dst=x_dst, q=q, k=k, v=v, r=r, valid_index_dst=valid_index_dst,
-                             size=size)
+        agg = self.propagate(edge_index=edge_index, x_dst=x_dst, q=q, k=k, v=v, r=r,
+                             valid_index_dst=valid_index_dst, size=size)
         return self.to_out(agg)
 
     def _ff_block(self, x: torch.Tensor) -> torch.Tensor:

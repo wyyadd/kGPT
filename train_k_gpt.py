@@ -10,7 +10,6 @@ from torch_geometric.loader import DataLoader
 from datamodules import WaymoSimDataModule
 from datasets import WaymoSimDataset
 from simulators import KGPT
-from transforms import VelocityBuilder
 
 if __name__ == '__main__':
     torch.set_float32_matmul_precision("high")

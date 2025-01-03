@@ -34,13 +34,13 @@ class FourierEmbedding(nn.Module):
         self.mlps = nn.ModuleList(
             [nn.Sequential(
                 nn.Linear(num_freq_bands * 2 + 1, hidden_dim),
-                nn.LayerNorm(hidden_dim),
+                nn.RMSNorm(hidden_dim),
                 nn.ReLU(inplace=True),
                 nn.Linear(hidden_dim, hidden_dim),
             )
                 for _ in range(input_dim)])
         self.to_out = nn.Sequential(
-            nn.LayerNorm(hidden_dim),
+            nn.RMSNorm(hidden_dim),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, hidden_dim),
         )

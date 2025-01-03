@@ -28,12 +28,11 @@ def weight_init(m: nn.Module) -> None:
             nn.init.zeros_(m.bias)
     elif isinstance(m, nn.Embedding):
         nn.init.normal_(m.weight, mean=0.0, std=0.02)
-    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.LayerNorm)):
         nn.init.ones_(m.weight)
         nn.init.zeros_(m.bias)
-    elif isinstance(m, nn.LayerNorm):
+    elif isinstance(m, nn.RMSNorm):
         nn.init.ones_(m.weight)
-        nn.init.zeros_(m.bias)
     elif isinstance(m, nn.MultiheadAttention):
         if m.in_proj_weight is not None:
             fan_in = m.embed_dim

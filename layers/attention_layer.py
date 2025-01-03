@@ -32,7 +32,7 @@ class AttentionLayer(MessagePassing):
                  bipartite: bool,
                  has_pos_emb: bool,
                  dst_pos_emb: bool = False,
-                 activation: str = 'relu',
+                 activation: str = 'swi_glu',
                  n_rep: int = 1,
                  **kwargs) -> None:
         super(AttentionLayer, self).__init__(aggr='add', node_dim=0, **kwargs)
@@ -53,8 +53,8 @@ class AttentionLayer(MessagePassing):
             self.to_v_r = nn.Linear(hidden_dim, self.num_kv_heads * head_dim)
         if dst_pos_emb:
             self.to_q_r = nn.Linear(hidden_dim, self.num_heads * head_dim)
-        self.to_s = nn.Linear(hidden_dim, self.num_heads * head_dim)
-        self.to_g = nn.Linear(self.num_heads * head_dim + hidden_dim, self.num_heads * head_dim)
+        # self.to_s = nn.Linear(hidden_dim, self.num_heads * head_dim)
+        # self.to_g = nn.Linear(self.num_heads * head_dim + hidden_dim, self.num_heads * head_dim)
         self.to_out = nn.Linear(self.num_heads * self.head_dim, hidden_dim)
         self.attn_drop = nn.Dropout(dropout)
         if activation == 'relu':
@@ -166,9 +166,10 @@ class AttentionLayer(MessagePassing):
             inputs = inputs.view(-1, self.num_heads * self.head_dim)
         else:
             inputs = inputs.view(-1, self.num_heads * self.head_dim)[valid_index_dst]
-            x_dst = x_dst[valid_index_dst]
-        g = torch.sigmoid(self.to_g(torch.cat([inputs, x_dst], dim=-1)))
-        return inputs + g * (self.to_s(x_dst) - inputs)
+            # x_dst = x_dst[valid_index_dst]
+        return inputs
+        # g = torch.sigmoid(self.to_g(torch.cat([inputs, x_dst], dim=-1)))
+        # return inputs + g * (self.to_s(x_dst) - inputs)
 
     def _attn_block(self,
                     x_src: torch.Tensor,

@@ -37,7 +37,6 @@ class KGPT(pl.LightningModule):
                  dropout: float,
                  lr: float,
                  weight_decay: float,
-                 T_max: int,
                  submission_dir: str,
                  simulation_times: int,
                  patch_size: int,
@@ -63,7 +62,6 @@ class KGPT(pl.LightningModule):
         self.dropout = dropout
         self.lr = lr
         self.weight_decay = weight_decay
-        self.T_max = T_max
         self.submission_dir = submission_dir
         self.simulation_times = simulation_times
         self.patch_size = patch_size
@@ -186,7 +184,7 @@ class KGPT(pl.LightningModule):
                 pred = self(data)
                 pi = pred['pi'][:, start_steps - 1, :num_action_steps]  # [agents, steps, patch, modes]
                 pi = F.softmax(pi, dim=-1).reshape(-1, pi.size(-1))
-                sample_inds = torch.multinomial(pi, num_samples=1, replacement=True).reshape(-1, self.patch_size)
+                sample_inds = torch.multinomial(pi, num_samples=1, replacement=True).reshape(-1, num_action_steps)
                 # sample_inds = top_p_sampling(pi, 0.95)
                 vel = pred['vel'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
                       sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.vel_dim]
@@ -295,7 +293,9 @@ class KGPT(pl.LightningModule):
         ]
 
         optimizer = torch.optim.AdamW(optim_groups, lr=self.lr, weight_decay=self.weight_decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer, T_max=self.T_max, eta_min=0.0)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer=optimizer, max_lr=self.lr,
+                                                        total_steps=self.trainer.estimated_stepping_batches)
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer, T_max=self.T_max, eta_min=0.0)
         return [optimizer], [scheduler]
 
     @staticmethod
@@ -318,8 +318,7 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--num_heads', type=int, default=8)
         parser.add_argument('--head_dim', type=int, default=16)
         parser.add_argument('--dropout', type=float, default=0.1)
-        parser.add_argument('--lr', type=float, default=5e-4)
-        parser.add_argument('--weight_decay', type=float, default=0.1)
-        parser.add_argument('--T_max', type=int, default=30)
+        parser.add_argument('--lr', type=float, default=1e-3)
+        parser.add_argument('--weight_decay', type=float, default=0.01)
         parser.add_argument('--patch_size', type=int, default=10)
         return parent_parser

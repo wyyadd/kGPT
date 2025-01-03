@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.strategies import DDPStrategy
 from torch_geometric.loader import DataLoader
 
@@ -13,7 +14,7 @@ from simulators import KGPT
 
 if __name__ == '__main__':
     torch.set_float32_matmul_precision("high")
-    pl.seed_everything(2024, workers=True)
+    pl.seed_everything(2025, workers=True)
 
     parser = ArgumentParser()
     parser.add_argument('--root', type=str, required=True)
@@ -48,9 +49,10 @@ if __name__ == '__main__':
         datamodule = WaymoSimDataModule(**vars(args))
         model_checkpoint = ModelCheckpoint(monitor='val_loss', save_top_k=5, mode='min')
         lr_monitor = LearningRateMonitor(logging_interval='epoch')
+        logger = TensorBoardLogger("./data/tb_logs")
         trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices, num_nodes=args.num_nodes,
                              strategy=DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
-                             callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs)
+                             callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs, logger=logger)
         trainer.fit(model, datamodule, ckpt_path=args.ckpt_path)
     else:
         model = KGPT.load_from_checkpoint(

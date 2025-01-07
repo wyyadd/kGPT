@@ -10,6 +10,7 @@ tqdm
 numpy
 shapely
 lightning
+matplotlib
 
 torch_geometric
 torch-scatter

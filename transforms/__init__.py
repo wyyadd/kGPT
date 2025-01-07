@@ -13,4 +13,4 @@
 # limitations under the License.
 from transforms.sim_agent_filter import SimAgentFilter
 from transforms.sim_target_builder import SimTargetBuilder
-from transforms.velocity_builder import VelocityBuilder
+from transforms.kinematic_controller import ControlActionBuilder

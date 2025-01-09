@@ -109,7 +109,7 @@ class KGPTDecoder(nn.Module):
 
         x_a = torch.stack(
             [torch.norm(vel[:, :, :2], p=2, dim=-1),
-             angle_between_2d_vectors(ctr_vector=head_vector_a, nbr_vector=vel[:, :, :2]),
+             head_a,
              length,
              width,
              height], dim=-1)

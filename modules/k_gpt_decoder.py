@@ -217,5 +217,5 @@ class KGPTDecoder(nn.Module):
         for i in range(self.patch_size - 1):
             out = self.unpack_patch(h, r_patch, edge_index_patch, valid_index=valid_index_t)
             h = self.to_out(torch.cat([self.h_norm(h), self.out_norm(out)], dim=-1))
-            x_a = torch.cat([x_a, h.unsqueeze(-1)], dim=-1)
+            x_a = torch.cat([x_a, out.unsqueeze(-1)], dim=-1)
         return x_a.reshape(-1, self.num_steps, self.hidden_dim, self.patch_size)

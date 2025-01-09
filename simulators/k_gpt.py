@@ -22,8 +22,9 @@ class KGPT(pl.LightningModule):
                  hidden_dim: int,
                  pos_dim: int,
                  vel_dim: int,
-                 theta_dim: int,
-                 yaw_rate_dim: int,
+                 yaw_dim: int,
+                 acc_dim: int,
+                 delta_dim: int,
                  num_modes: int,
                  num_steps: int,
                  num_init_steps: int,
@@ -47,8 +48,9 @@ class KGPT(pl.LightningModule):
         self.hidden_dim = hidden_dim
         self.pos_dim = pos_dim
         self.vel_dim = vel_dim
-        self.theta_dim = theta_dim
-        self.yaw_rate_dim = yaw_rate_dim
+        self.yaw_dim = yaw_dim
+        self.acc_dim = acc_dim
+        self.delta_dim = delta_dim
         self.num_modes = num_modes
         self.num_steps = num_steps
         self.num_init_steps = num_init_steps
@@ -82,16 +84,16 @@ class KGPT(pl.LightningModule):
         self.head = KGPTHead(
             hidden_dim=hidden_dim,
             num_modes=num_modes,
-            vel_dim=vel_dim,
-            yaw_rate_dim=yaw_rate_dim,
             patch_size=patch_size,
+            acc_dim=acc_dim,
+            delta_dim=delta_dim,
         )
 
         if num_modes == 1:
-            self.loss = NLLLoss(component_distribution=['laplace'] * vel_dim + ['von_mises'] * yaw_rate_dim,
+            self.loss = NLLLoss(component_distribution=['laplace'] * (acc_dim + 1) + ['von_mises'] * delta_dim,
                                 reduction='none')
         else:
-            self.loss = MixtureNLLLoss(component_distribution=['laplace'] * vel_dim + ['von_mises'] * yaw_rate_dim,
+            self.loss = MixtureNLLLoss(component_distribution=['laplace'] * (acc_dim + 1) + ['von_mises'] * delta_dim,
                                        reduction='none')
         self.test_predictions = dict()
 
@@ -113,11 +115,9 @@ class KGPT(pl.LightningModule):
         pred = self(data)
         pi = pred['pi']
         pred = torch.cat([
-            pred['vel'], pred['yaw_rate'],
-            pred['vel_scale'], pred['yaw_scale']], dim=-1)
-        target = torch.cat([
-            data['agent']['target'][:, :self.num_steps, :, :self.vel_dim],
-            data['agent']['target'][:, :self.num_steps, :, -self.yaw_rate_dim:]], dim=-1)
+            pred['acc'], pred['delta'], pred['height'],
+            pred['acc_scale'], pred['delta_scale'], pred['height_scale']], dim=-1)
+        target = data['agent']['target']
 
         if self.num_modes == 1:
             loss = self.loss(pred, target.unsqueeze(-3)).sum(dim=(-3, -2, -1))
@@ -145,11 +145,9 @@ class KGPT(pl.LightningModule):
         pred = self(data)
         pi = pred['pi']
         pred = torch.cat([
-            pred['vel'], pred['yaw_rate'],
-            pred['vel_scale'], pred['yaw_scale']], dim=-1)
-        target = torch.cat([
-            data['agent']['target'][:, :self.num_steps, :, :self.vel_dim],
-            data['agent']['target'][:, :self.num_steps, :, -self.yaw_rate_dim:]], dim=-1)
+            pred['acc'], pred['delta'], pred['height'],
+            pred['acc_scale'], pred['delta_scale'], pred['height_scale']], dim=-1)
+        target = data['agent']['target']
 
         if self.num_modes == 1:
             loss = self.loss(pred, target.unsqueeze(-3)).sum(dim=(-3, -2, -1))
@@ -186,31 +184,46 @@ class KGPT(pl.LightningModule):
                 pi = F.softmax(pi, dim=-1).reshape(-1, pi.size(-1))
                 sample_inds = torch.multinomial(pi, num_samples=1, replacement=True).reshape(-1, num_action_steps)
                 # sample_inds = top_p_sampling(pi, 0.95)
-                vel = pred['vel'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
-                      sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.vel_dim]
-                yaw_rate = pred['yaw_rate'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
-                           sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.yaw_rate_dim]
-
-                # Transform to global coordinates
-                current_theta = data['agent']['heading'][:, start_steps - 1]
-                cos, sin = current_theta.cos(), current_theta.sin()
-                rot_mat = torch.stack([torch.stack([cos, sin], dim=-1),
-                                       torch.stack([-sin, cos], dim=-1)], dim=-2)
+                acc = pred['acc'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
+                      sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.acc_dim]
+                delta = pred['delta'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
+                        sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.delta_dim]
+                delta = torch.clip(delta, -torch.pi / 2, torch.pi / 2)
+                delta_z = pred['height'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
+                          sample_inds, torch.arange(num_action_steps).unsqueeze(0), :1]
 
                 # velocity
-                vel[..., :2] = vel[..., :2] @ rot_mat
-                data['agent']['velocity'][:, start_steps: end_steps, :self.vel_dim] = vel[..., :self.vel_dim]
+                vel = torch.norm(data['agent']['velocity'][:, start_steps - 1, :self.vel_dim], p=2, dim=-1)
+                vel = vel.reshape(vel.size(0), 1, 1)
+                vel = vel + (acc * interval).cumsum(dim=1)
+
+                # yaw
+                yaw = data['agent']['heading'][:, start_steps - 1]
+                height = data['agent']["height"][:, start_steps - 1: end_steps - 1].unsqueeze(-1)
+                yaw = yaw.reshape(yaw.size(0), 1, 1)
+                yaw = yaw + (vel / height * torch.tan(delta) * interval).cumsum(dim=1)
+                yaw = wrap_angle(yaw)
 
                 # position
-                vel_old = data['agent']['velocity'][:, start_steps - 1:end_steps - 1, :self.vel_dim]
-                delta_pos = ((vel + vel_old) * interval / 2).cumsum(dim=1)
-                data['agent']['position'][:, start_steps:end_steps, :self.pos_dim] = data['agent']['position'][:,
-                                                                                     [start_steps - 1],
-                                                                                     :self.pos_dim] + delta_pos
+                position_x = data['agent']['position'][:, start_steps - 1, 0]
+                position_x = position_x.reshape(position_x.size(0), 1, 1)
+                position_x = position_x + (vel * torch.cos(yaw) * interval).cumsum(dim=1)
 
-                # heading
-                data['agent']['heading'][:, start_steps:end_steps] = wrap_angle(
-                    current_theta.unsqueeze(-1) + yaw_rate[..., 0])
+                position_y = data['agent']['position'][:, start_steps - 1, 1]
+                position_y = position_y.reshape(position_y.size(0), 1, 1)
+                position_y = position_y + (vel * torch.sin(yaw) * interval).cumsum(dim=1)
+
+                position_z = data['agent']['position'][:, start_steps - 1, 2]
+                position_z = position_z.reshape(position_z.size(0), 1, 1)
+                position_z = position_z + delta_z.cumsum(dim=1)
+
+                # update
+                data['agent']['velocity'][:, start_steps:end_steps, :self.vel_dim] = torch.cat(
+                    [vel * torch.cos(yaw), vel * torch.sin(yaw)], dim=-1)
+                data['agent']['heading'][:, start_steps:end_steps] = yaw.squeeze(-1)
+                data['agent']['position'][:, start_steps:end_steps, :self.pos_dim] = torch.cat(
+                    [position_x, position_y, position_z], dim=-1)
+
             traj_eval.append(torch.cat([data['agent']['position'][eval_mask, self.num_init_steps:, :3],
                                         data['agent']['heading'][eval_mask, self.num_init_steps:].unsqueeze(-1)],
                                        dim=-1))
@@ -302,11 +315,12 @@ class KGPT(pl.LightningModule):
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group('KGPT')
         parser.add_argument('--input_dim', type=int, default=3)
-        parser.add_argument('--hidden_dim', type=int, default=128)
+        parser.add_argument('--hidden_dim', type=int, default=64)
         parser.add_argument('--pos_dim', type=int, default=3)
-        parser.add_argument('--vel_dim', type=int, default=3)
-        parser.add_argument('--theta_dim', type=int, default=1)
-        parser.add_argument('--yaw_rate_dim', type=int, default=1)
+        parser.add_argument('--vel_dim', type=int, default=2)
+        parser.add_argument('--yaw_dim', type=int, default=1)
+        parser.add_argument('--acc_dim', type=int, default=1)
+        parser.add_argument('--delta_dim', type=int, default=1)
         parser.add_argument('--num_modes', type=int, default=16)
         parser.add_argument('--num_steps', type=int, default=91)
         parser.add_argument('--num_init_steps', type=int, default=11)
@@ -315,7 +329,7 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--num_a2a_nbrs', type=int, default=32)
         parser.add_argument('--num_freq_bands', type=int, default=64)
         parser.add_argument('--num_layers', type=int, default=2)
-        parser.add_argument('--num_heads', type=int, default=8)
+        parser.add_argument('--num_heads', type=int, default=4)
         parser.add_argument('--head_dim', type=int, default=16)
         parser.add_argument('--dropout', type=float, default=0.1)
         parser.add_argument('--lr', type=float, default=1e-3)

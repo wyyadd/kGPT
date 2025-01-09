@@ -13,61 +13,74 @@ class KGPTHead(nn.Module):
     def __init__(self,
                  hidden_dim: int,
                  num_modes: int,
-                 vel_dim: int,
-                 yaw_rate_dim: int,
-                 patch_size: int) -> None:
+                 patch_size: int,
+                 acc_dim: int,
+                 delta_dim: int,
+                 height_dim: int = 1) -> None:
         super(KGPTHead, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_modes = num_modes
-        self.vel_dim = vel_dim
-        self.yaw_dim = yaw_rate_dim
+        self.acc_dim = acc_dim
+        self.delta_dim = delta_dim
+        self.height_dim = height_dim
         self.patch_size = patch_size
 
         self.to_pi = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim, output_dim=num_modes)
         self.to_control_action = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim,
-                                          output_dim=(vel_dim + yaw_rate_dim) * num_modes)
+                                          output_dim=(acc_dim + delta_dim + height_dim) * num_modes)
         self.to_scale = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim,
-                                 output_dim=(vel_dim + yaw_rate_dim) * num_modes)
+                                 output_dim=(acc_dim + delta_dim + height_dim) * num_modes)
         self.apply(weight_init)
 
     def forward(self, x_a: torch.Tensor) -> Dict[str, torch.Tensor]:
         # [agents, steps, patch, modes]
         pi = self.to_pi(x_a.transpose(-2, -1))
 
-        vel = torch.tensor([], device=x_a.device)
-        yaw_rate = torch.tensor([], device=x_a.device)
-        vel_scale = torch.tensor([], device=x_a.device)
-        yaw_scale = torch.tensor([], device=x_a.device)
+        acc = torch.tensor([], device=x_a.device)
+        delta = torch.tensor([], device=x_a.device)
+        acc_scale = torch.tensor([], device=x_a.device)
+        delta_scale = torch.tensor([], device=x_a.device)
+        height = torch.tensor([], device=x_a.device)
+        height_scale = torch.tensor([], device=x_a.device)
 
         for i in range(self.patch_size):
             h = x_a[..., i]
             control_action = self.to_control_action(h).unsqueeze(-2)
             scale = self.to_scale(h).unsqueeze(-2)
 
-            new_vel, new_yaw_rate = control_action.split([self.vel_dim * self.num_modes,
-                                                          self.yaw_dim * self.num_modes], dim=-1)
-            new_vel_scale, new_yaw_scale = scale.split([self.vel_dim * self.num_modes,
-                                                        self.yaw_dim * self.num_modes], dim=-1)
+            new_acc, new_delta, new_height = control_action.split([self.acc_dim * self.num_modes,
+                                                                   self.delta_dim * self.num_modes,
+                                                                   self.height_dim * self.num_modes], dim=-1)
+            new_acc_scale, new_delta_scale, new_height_scale = scale.split([self.acc_dim * self.num_modes,
+                                                                            self.delta_dim * self.num_modes,
+                                                                            self.height_dim * self.num_modes], dim=-1)
 
             # constrain to [-pi,pi] same to target
-            new_yaw_rate = torch.tanh(new_yaw_rate) * math.pi
-            new_vel_scale = F.elu(new_vel_scale, alpha=1.0) + 1.0
-            new_yaw_scale = 1.0 / (F.elu(new_yaw_scale, alpha=1.0) + 1.0 + 1e-4)
+            new_delta = torch.tanh(new_delta) * math.pi
+            new_acc_scale = F.elu(new_acc_scale, alpha=1.0) + 1.0
+            new_delta_scale = 1.0 / (F.elu(new_delta_scale, alpha=1.0) + 1.0 + 1e-4)
+            new_height_scale = F.elu(new_height_scale, alpha=1.0) + 1.0
 
-            vel = torch.cat([vel, new_vel], dim=-2)
-            yaw_rate = torch.cat([yaw_rate, new_yaw_rate], dim=-2)
-            vel_scale = torch.cat([vel_scale, new_vel_scale], dim=-2)
-            yaw_scale = torch.cat([yaw_scale, new_yaw_scale], dim=-2)
+            acc = torch.cat([acc, new_acc], dim=-2)
+            delta = torch.cat([delta, new_delta], dim=-2)
+            acc_scale = torch.cat([acc_scale, new_acc_scale], dim=-2)
+            delta_scale = torch.cat([delta_scale, new_delta_scale], dim=-2)
+            height = torch.cat([height, new_height], dim=-2)
+            height_scale = torch.cat([height_scale, new_height_scale], dim=-2)
 
-        vel = vel.reshape(*x_a.shape[:2], -1, self.num_modes, self.vel_dim).transpose(-3, -2)
-        yaw_rate = yaw_rate.reshape(*x_a.shape[:2], -1, self.num_modes, self.yaw_dim).transpose(-3, -2)
-        vel_scale = vel_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.vel_dim).transpose(-3, -2)
-        yaw_scale = yaw_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.yaw_dim).transpose(-3, -2)
+        acc = acc.reshape(*x_a.shape[:2], -1, self.num_modes, self.acc_dim).transpose(-3, -2)
+        delta = delta.reshape(*x_a.shape[:2], -1, self.num_modes, self.delta_dim).transpose(-3, -2)
+        height = height.reshape(*x_a.shape[:2], -1, self.num_modes, self.height_dim).transpose(-3, -2)
+        acc_scale = acc_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.acc_dim).transpose(-3, -2)
+        delta_scale = delta_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.delta_dim).transpose(-3, -2)
+        height_scale = height_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.height_dim).transpose(-3, -2)
 
         return {
             "pi": pi,
-            "vel": vel,
-            "yaw_rate": yaw_rate,
-            "vel_scale": vel_scale,
-            "yaw_scale": yaw_scale,
+            "acc": acc,
+            "delta": delta,
+            "height": height,
+            "acc_scale": acc_scale,
+            "delta_scale": delta_scale,
+            "height_scale": height_scale
         }

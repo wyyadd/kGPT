@@ -50,8 +50,8 @@ class KinematicControl:
         self.x += self.v * torch.cos(self.yaw) * self.dt
         self.y += self.v * torch.sin(self.yaw) * self.dt
 
-        self.acc[idx - 1] = acceleration
-        self.delta[idx - 1] = delta
+        self.acc[idx] = acceleration
+        self.delta[idx] = delta
 
     def get_control_actions(self):
         return self.acc, self.delta
@@ -125,7 +125,7 @@ class KinematicControl:
             plt.show()
 
 
-def get_control_actions(scenario: HeteroData) -> HeteroData:
+def get_control_actions(scenario: HeteroData):
     delta_time = 0.1
 
     acceleration = torch.zeros_like(scenario["agent"]["heading"])
@@ -160,14 +160,22 @@ def get_control_actions(scenario: HeteroData) -> HeteroData:
             a, d = control.get_control_actions()
             acceleration[agent_idx, start:end] = a
             delta[agent_idx, start:end] = d
-    scenario["agent"]["acceleration"] = acceleration
-    scenario["agent"]["delta"] = delta
-    return scenario
+    return acceleration, delta
 
 
 class ControlActionBuilder(BaseTransform):
-    def __init__(self) -> None:
+    def __init__(self, patch: int = 10) -> None:
         super().__init__()
+        self.patch = patch
 
-    def __call__(self, scenario: HeteroData) -> HeteroData:
-        return get_control_actions(scenario)
+    def __call__(self, data: HeteroData) -> HeteroData:
+        pos = data['agent']['position']
+        # num_agent, steps, patch_size, 3 -> acceleration, delta, height
+        data['agent']['target'] = pos.new_zeros(*pos.shape[:2], self.patch, 3)
+        delta_height = pos[:, 1:, 2] - pos[:, :-1, 2]
+        acc, delta = get_control_actions(data)
+        for t in range(self.patch):
+            data['agent']['target'][:, :-t - 1, t, 0] = acc[:, t + 1:]
+            data['agent']['target'][:, :-t - 1, t, 1] = delta[:, t + 1:]
+            data['agent']['target'][:, :-t - 1, t, 2] = delta_height[:, t:]
+        return data

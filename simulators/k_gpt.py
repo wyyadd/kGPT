@@ -193,15 +193,16 @@ class KGPT(pl.LightningModule):
                           sample_inds, torch.arange(num_action_steps).unsqueeze(0), :1]
 
                 # velocity
-                vel = torch.norm(data['agent']['velocity'][:, start_steps - 1, :self.vel_dim], p=2, dim=-1)
-                vel = vel.reshape(vel.size(0), 1, 1)
-                vel = vel + (acc * interval).cumsum(dim=1)
+                prev_vel = torch.norm(data['agent']['velocity'][:, start_steps - 1, :self.vel_dim], p=2, dim=-1)
+                prev_vel = prev_vel.reshape(prev_vel.size(0), 1, 1)
+                vel = prev_vel + (acc * interval).cumsum(dim=1)
 
                 # yaw
                 yaw = data['agent']['heading'][:, start_steps - 1]
                 height = data['agent']["height"][:, start_steps - 1: end_steps - 1].unsqueeze(-1)
                 yaw = yaw.reshape(yaw.size(0), 1, 1)
-                yaw = yaw + (vel / height * torch.tan(delta) * interval).cumsum(dim=1)
+                prev_vel = torch.cat([prev_vel, vel], dim=1)[:, :num_action_steps]
+                yaw = yaw + (prev_vel / height * torch.tan(delta) * interval).cumsum(dim=1)
                 yaw = wrap_angle(yaw)
 
                 # position

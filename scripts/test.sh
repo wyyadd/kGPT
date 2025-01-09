@@ -9,10 +9,9 @@
 #SBATCH --mail-type=ALL
 
 cd $project/kGPT
-module purge module load python/3.11
-source ~/agents/bin/activate
-
-pip3 install -r requirements.txt
+module purge
+module load python/3.12.4
+source ../agents/bin/activate
 
 srun python3 train_k_gpt.py \
 --mode="val" \

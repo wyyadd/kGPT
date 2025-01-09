@@ -7,8 +7,8 @@
 #SBATCH --mail-type=ALL
 
 cd $project/kGPT
-module purge module load python/3.11
-source ~/agents/bin/activate
+module purge module load python/3.12.4
+source ../agents/bin/activate
 
 python3 generate_submission.py \
 --root="./data/pkl_files/scenarios" \

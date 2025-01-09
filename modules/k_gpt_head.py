@@ -63,9 +63,9 @@ class KGPTHead(nn.Module):
 
             acc = torch.cat([acc, new_acc], dim=-2)
             delta = torch.cat([delta, new_delta], dim=-2)
+            height = torch.cat([height, new_height], dim=-2)
             acc_scale = torch.cat([acc_scale, new_acc_scale], dim=-2)
             delta_scale = torch.cat([delta_scale, new_delta_scale], dim=-2)
-            height = torch.cat([height, new_height], dim=-2)
             height_scale = torch.cat([height_scale, new_height_scale], dim=-2)
 
         acc = acc.reshape(*x_a.shape[:2], -1, self.num_modes, self.acc_dim).transpose(-3, -2)

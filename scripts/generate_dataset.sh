@@ -8,10 +8,8 @@
 
 cd $project/kGPT
 module purge
-module load python/3.11
-source ~/agents/bin/activate
-
-pip3 install -r requirements.txt
+module load python/3.12.4
+source ../agents/bin/activate
 
 python3 generate_dataset.py \
 --root="$project/kGPT/data" \

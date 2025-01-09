@@ -90,7 +90,7 @@ class KGPTDecoder(nn.Module):
                                            dropout=dropout, bipartite=False, has_pos_emb=True)
         self.h_norm = nn.RMSNorm(hidden_dim)
         self.out_norm = nn.RMSNorm(hidden_dim)
-        self.to_out = nn.Linear(hidden_dim * 2, hidden_dim)
+        self.to_input = nn.Linear(hidden_dim * 2, hidden_dim)
         self.apply(weight_init)
 
     def forward(self,
@@ -213,9 +213,9 @@ class KGPTDecoder(nn.Module):
 
         # [steps*agents, dim, patch]
         h = x_a
-        x_a = x_a.unsqueeze(-1)
-        for i in range(self.patch_size - 1):
+        x_a = x_a.new_zeros(*x_a.shape, self.patch_size)
+        for i in range(self.patch_size):
             out = self.unpack_patch(h, r_patch, edge_index_patch, valid_index=valid_index_t)
-            h = self.to_out(torch.cat([self.h_norm(h), self.out_norm(out)], dim=-1))
-            x_a = torch.cat([x_a, out.unsqueeze(-1)], dim=-1)
+            h = self.to_input(torch.cat([self.h_norm(h), self.out_norm(out)], dim=-1))
+            x_a[..., i] = out
         return x_a.reshape(-1, self.num_steps, self.hidden_dim, self.patch_size)

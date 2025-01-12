@@ -199,10 +199,8 @@ class KGPT(pl.LightningModule):
 
                 # yaw
                 yaw = data['agent']['heading'][:, start_steps - 1]
-                height = data['agent']["height"][:, start_steps - 1: end_steps - 1].unsqueeze(-1)
                 yaw = yaw.reshape(yaw.size(0), 1, 1)
-                prev_vel = torch.cat([prev_vel, vel], dim=1)[:, :num_action_steps]
-                yaw = yaw + (prev_vel / height * torch.tan(delta) * interval).cumsum(dim=1)
+                yaw = yaw + (delta * interval).cumsum(dim=1)
                 yaw = wrap_angle(yaw)
 
                 # position

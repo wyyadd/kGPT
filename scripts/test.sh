@@ -21,9 +21,9 @@ srun python3 train_k_gpt.py \
 --accelerator="auto" \
 --devices=-1 \
 --num_nodes=$SLURM_NNODES \
---train_batch_size=6 \
---val_batch_size=6 \
---test_batch_size=12 \
+--train_batch_size=4 \
+--val_batch_size=4 \
+--test_batch_size=8 \
 --submission_dir="./data/pkl_files" \
 --simulation_times=32 \
 --ckpt_path=""

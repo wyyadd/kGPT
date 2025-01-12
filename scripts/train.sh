@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --nodes=2
+#SBATCH --nodes=4
 #SBATCH --ntasks-per-node=4
 #SBATCH --gpus-per-node=a100:4
 #SBATCH --cpus-per-task=4
@@ -25,7 +25,7 @@ srun python3 train_k_gpt.py \
 --accelerator="auto" \
 --devices=-1 \
 --num_nodes=$SLURM_NNODES \
---train_batch_size=6 \
---val_batch_size=6 \
---test_batch_size=12 \
---lr=1e-3
+--train_batch_size=4 \
+--val_batch_size=4 \
+--test_batch_size=8 \
+--lr=2e-3

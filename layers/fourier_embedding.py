@@ -57,10 +57,11 @@ class FourierEmbedding(nn.Module):
                     return self.to_out(x)
                 else:
                     x = torch.stack(categorical_embs)
-                    return torch.zeros_like(x[0]).scatter_(
+                    src = self.to_out(x[:, valid_index].sum(dim=0))
+                    return torch.zeros_like(x[0], dtype=src.dtype).scatter_(
                         dim=0,
                         index=valid_index.unsqueeze(-1).repeat(1, self.hidden_dim),
-                        src=self.to_out(x[:, valid_index].sum(dim=0)),
+                        src=src,
                     )
             else:
                 raise ValueError('Both continuous_inputs and categorical_embs are None')
@@ -88,8 +89,10 @@ class FourierEmbedding(nn.Module):
                 x = torch.stack(continuous_embs).sum(dim=0)
                 if categorical_embs is not None:
                     x = x + torch.stack(categorical_embs)[:, valid_index].sum(dim=0)
+                src = self.to_out(x)
+                out = out.to(src.dtype)
                 return out.scatter_(
                     dim=0,
                     index=valid_index.unsqueeze(-1).repeat(1, self.hidden_dim),
-                    src=self.to_out(x),
+                    src=src,
                 )

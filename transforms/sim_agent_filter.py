@@ -75,4 +75,7 @@ class SimAgentFilter(BaseTransform):
         data['agent']['width'] = data['agent']['width'][agent_inds].clone()
         data['agent']['height'] = data['agent']['height'][agent_inds].clone()
 
+        data['agent']['acc'] = data['agent']['acc'][agent_inds].clone()
+        data['agent']['delta'] = data['agent']['delta'][agent_inds].clone()
+
         return data

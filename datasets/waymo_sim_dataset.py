@@ -27,6 +27,7 @@ from torch_geometric.data import Dataset
 from torch_geometric.data import HeteroData
 from tqdm import tqdm
 
+from transforms import get_control_actions
 from utils import interp_arc
 
 try:
@@ -90,16 +91,14 @@ class WaymoSimDataset(Dataset):
             raw_dir = os.path.join(root, self.dir, 'raw')
             self._raw_dir = raw_dir
             if os.path.isdir(self._raw_dir):
-                self._raw_file_names = [name for name in os.listdir(self._raw_dir) if
-                                        os.path.isfile(os.path.join(self._raw_dir, name))]
+                self._raw_file_names = [name for name in os.listdir(self._raw_dir)]
             else:
                 self._raw_file_names = []
         else:
             raw_dir = os.path.expanduser(os.path.normpath(raw_dir))
             self._raw_dir = raw_dir
             if os.path.isdir(self._raw_dir):
-                self._raw_file_names = [name for name in os.listdir(self._raw_dir) if
-                                        os.path.isfile(os.path.join(self._raw_dir, name))]
+                self._raw_file_names = [name for name in os.listdir(self._raw_dir)]
             else:
                 self._raw_file_names = []
 
@@ -107,18 +106,14 @@ class WaymoSimDataset(Dataset):
             processed_dir = os.path.join(root, self.dir, 'processed')
             self._processed_dir = processed_dir
             if os.path.isdir(self._processed_dir):
-                self._processed_file_names = [name for name in os.listdir(self._processed_dir) if
-                                              os.path.isfile(os.path.join(self._processed_dir, name)) and
-                                              name.endswith(('pkl', 'pickle'))]
+                self._processed_file_names = [name for name in os.listdir(self._processed_dir)]
             else:
                 self._processed_file_names = []
         else:
             processed_dir = os.path.expanduser(os.path.normpath(processed_dir))
             self._processed_dir = processed_dir
             if os.path.isdir(self._processed_dir):
-                self._processed_file_names = [name for name in os.listdir(self._processed_dir) if
-                                              os.path.isfile(os.path.join(self._processed_dir, name)) and
-                                              name.endswith(('pkl', 'pickle'))]
+                self._processed_file_names = [name for name in os.listdir(self._processed_dir)]
             else:
                 self._processed_file_names = []
 
@@ -128,9 +123,7 @@ class WaymoSimDataset(Dataset):
         if split != "train" and submission_dir is not None:
             submission_dir = os.path.join(submission_dir, 'scenarios')
             if os.path.isdir(submission_dir):
-                self.to_predicted_file_names = {name for name in os.listdir(submission_dir) if
-                                                os.path.isfile(os.path.join(submission_dir, name)) and
-                                                name.endswith(('pkl', 'pickle'))}
+                self.to_predicted_file_names = {name for name in os.listdir(submission_dir)}
                 self.to_predicted_file_names = list(set(self._processed_file_names) - self.to_predicted_file_names)
 
         self.dim = dim
@@ -212,6 +205,10 @@ class WaymoSimDataset(Dataset):
             data['scenario_id'] = scenario.scenario_id
             data['agent'] = self.get_agent_features(scenario)
             data['map_point'] = self.get_map_features(scenario)
+            # generate control action
+            acc, delta, _ = get_control_actions(data)
+            data["agent"]["acc"] = acc
+            data["agent"]["delta"] = delta
             # data['traffic_light'] = self.get_signal_features(scenario)
             with open(os.path.join(self.processed_dir, f'{scenario.scenario_id}.pkl'), 'wb') as handle:
                 pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)

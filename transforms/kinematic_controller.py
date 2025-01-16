@@ -4,7 +4,7 @@ Path tracking simulation with Stanley steering control and PID speed control.
 import os
 import pickle
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import Union
+from typing import Union, Dict
 
 import matplotlib.pyplot as plt
 import torch
@@ -143,7 +143,7 @@ class KinematicControl:
             plt.show()
 
 
-def get_control_actions(scenario: Union[HeteroData, str], show_animation=False, generate_metrics=False):
+def get_control_actions(scenario: Union[HeteroData, str, Dict], show_animation=False, generate_metrics=False):
     if isinstance(scenario, str):
         with open(scenario, "rb") as f:
             scenario = pickle.load(f)
@@ -202,7 +202,9 @@ class ControlActionBuilder(BaseTransform):
         # num_agent, steps, patch_size, 3 -> acceleration, delta, height
         data['agent']['target'] = pos.new_zeros(*pos.shape[:2], self.patch, 3)
         delta_height = pos[:, 1:, 2] - pos[:, :-1, 2]
-        acc, delta, _ = get_control_actions(data)
+        acc = data['agent']['acc']
+        delta = data['agent']['delta']
+        # acc, delta, _ = get_control_actions(data)
         for t in range(self.patch):
             data['agent']['target'][:, :-t - 1, t, 0] = acc[:, t + 1:]
             data['agent']['target'][:, :-t - 1, t, 1] = delta[:, t + 1:]

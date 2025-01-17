@@ -90,8 +90,7 @@ class FourierEmbedding(nn.Module):
                 if categorical_embs is not None:
                     x = x + torch.stack(categorical_embs)[:, valid_index].sum(dim=0)
                 src = self.to_out(x)
-                out = out.to(src.dtype)
-                return out.scatter_(
+                return out.to(src.dtype).scatter_(
                     dim=0,
                     index=valid_index.unsqueeze(-1).repeat(1, self.hidden_dim),
                     src=src,

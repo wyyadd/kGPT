@@ -51,7 +51,8 @@ if __name__ == '__main__':
         lr_monitor = LearningRateMonitor(logging_interval='epoch')
         trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices, num_nodes=args.num_nodes,
                              strategy=DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
-                             callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs)
+                             callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs,
+                             precision="bf16-mixed")
         trainer.fit(model, datamodule, ckpt_path=args.ckpt_path)
     else:
         model = KGPT.load_from_checkpoint(

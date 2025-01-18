@@ -114,20 +114,14 @@ class KGPTDecoder(nn.Module):
                            valid_index=valid_index_t)
         x_a = x_a.view(-1, self.num_steps, self.hidden_dim)
 
-        # cache x_m for testing
-        if "x_m" not in data['map_point']:
-            if self.input_dim == 2:
-                x_m = data['map_point']['magnitude'].unsqueeze(-1)
-            elif self.input_dim == 3:
-                x_m = torch.stack([data['map_point']['magnitude'], data['map_point']['height']], dim=-1)
-            else:
-                raise ValueError('{} is not a valid dimension'.format(self.input_dim))
-            type_m_emb = [self.type_m_emb(data['map_point']['type'].long())]
-            x_m = self.x_m_emb(continuous_inputs=x_m, categorical_embs=type_m_emb)
-            data['map_point']['x_m'] = x_m
+        if self.input_dim == 2:
+            x_m = data['map_point']['magnitude'].unsqueeze(-1)
+        elif self.input_dim == 3:
+            x_m = torch.stack([data['map_point']['magnitude'], data['map_point']['height']], dim=-1)
         else:
-            x_m = data['map_point']['x_m']
-
+            raise ValueError('{} is not a valid dimension'.format(self.input_dim))
+        type_m_emb = [self.type_m_emb(data['map_point']['type'].long())]
+        x_m = self.x_m_emb(continuous_inputs=x_m, categorical_embs=type_m_emb)
         pos_t = pos_a.reshape(-1, self.input_dim)
         head_t = head_a.reshape(-1)
         head_vector_t = head_vector_a.reshape(-1, 2)

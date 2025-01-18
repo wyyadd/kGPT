@@ -87,9 +87,9 @@ class AttentionLayer(MessagePassing):
 
     def repeat_kv(self, x: torch.Tensor) -> torch.Tensor:
         """torch.repeat_interleave(x, dim=2, repeats=n_rep)"""
-        bs_slen, n_kv_heads, head_dim = x.shape
         if self.n_rep == 1:
             return x
+        bs_slen, n_kv_heads, head_dim = x.shape
         return (
             x[:, :, None, :]
             .expand(bs_slen, n_kv_heads, self.n_rep, head_dim)
@@ -149,8 +149,8 @@ class AttentionLayer(MessagePassing):
                 index: Optional[torch.Tensor],
                 ptr: Optional[torch.Tensor]) -> torch.Tensor:
         if self.has_pos_emb and r is not None:
-            k_j = k_j + self.to_k_r(r).view(-1, self.num_kv_heads, self.head_dim)
-            v_j = v_j + self.to_v_r(r).view(-1, self.num_kv_heads, self.head_dim)
+            k_j += self.to_k_r(r).view(-1, self.num_kv_heads, self.head_dim)
+            v_j += self.to_v_r(r).view(-1, self.num_kv_heads, self.head_dim)
         k_j = self.repeat_kv(k_j)
         v_j = self.repeat_kv(v_j)
         sim = (q_i * k_j).sum(dim=-1) * self.scale

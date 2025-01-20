@@ -199,16 +199,17 @@ class ControlActionBuilder(BaseTransform):
 
     def __call__(self, data: HeteroData) -> HeteroData:
         pos = data['agent']['position']
+        target_idx = data['agent']['target_idx']
         # num_agent, steps, patch_size, 3 -> acceleration, delta, height
-        data['agent']['target'] = pos.new_zeros(*pos.shape[:2], self.patch, 3)
+        data['agent']['target'] = pos.new_zeros(target_idx.numel(), pos.shape[1], self.patch, 3)
         delta_height = pos[:, 1:, 2] - pos[:, :-1, 2]
         acc = data['agent']['acc']
         delta = data['agent']['delta']
         # acc, delta, _ = get_control_actions(data)
         for t in range(self.patch):
-            data['agent']['target'][:, :-t - 1, t, 0] = acc[:, t + 1:]
-            data['agent']['target'][:, :-t - 1, t, 1] = delta[:, t + 1:]
-            data['agent']['target'][:, :-t - 1, t, 2] = delta_height[:, t:]
+            data['agent']['target'][:, :-t - 1, t, 0] = acc[target_idx, t + 1:]
+            data['agent']['target'][:, :-t - 1, t, 1] = delta[target_idx, t + 1:]
+            data['agent']['target'][:, :-t - 1, t, 2] = delta_height[target_idx, t:]
         return data
 
 

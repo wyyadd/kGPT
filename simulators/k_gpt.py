@@ -314,7 +314,7 @@ class KGPT(pl.LightningModule):
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group('KGPT')
         parser.add_argument('--input_dim', type=int, default=3)
-        parser.add_argument('--hidden_dim', type=int, default=64)
+        parser.add_argument('--hidden_dim', type=int, default=128)
         parser.add_argument('--pos_dim', type=int, default=3)
         parser.add_argument('--vel_dim', type=int, default=2)
         parser.add_argument('--yaw_dim', type=int, default=1)
@@ -328,7 +328,7 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--num_a2a_nbrs', type=int, default=32)
         parser.add_argument('--num_freq_bands', type=int, default=64)
         parser.add_argument('--num_layers', type=int, default=2)
-        parser.add_argument('--num_heads', type=int, default=4)
+        parser.add_argument('--num_heads', type=int, default=8)
         parser.add_argument('--head_dim', type=int, default=16)
         parser.add_argument('--dropout', type=float, default=0.1)
         parser.add_argument('--lr', type=float, default=1e-3)

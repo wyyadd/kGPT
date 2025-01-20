@@ -333,5 +333,4 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--dropout', type=float, default=0.1)
         parser.add_argument('--lr', type=float, default=1e-3)
         parser.add_argument('--weight_decay', type=float, default=0.01)
-        parser.add_argument('--patch_size', type=int, default=5)
         return parent_parser

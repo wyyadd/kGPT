@@ -40,6 +40,7 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt_path', type=str, default=None)
     parser.add_argument('--mode', type=str, default="train")
     parser.add_argument('--simulation_times', type=int, default=32)
+    parser.add_argument('--patch_size', type=int, default=5)
     KGPT.add_model_specific_args(parser)
     args = parser.parse_args()
     print(args)

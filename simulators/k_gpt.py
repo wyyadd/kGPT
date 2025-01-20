@@ -104,7 +104,7 @@ class KGPT(pl.LightningModule):
     def training_step(self,
                       data,
                       batch_idx):
-        valid_mask = data['agent']['valid_mask'][:, :self.num_steps]
+        valid_mask = data['agent']['valid_mask'][data['agent']['target_idx'], :self.num_steps]
         predict_mask = torch.zeros_like(valid_mask).unsqueeze(-1).repeat(1, 1, self.patch_size)
         for t in range(self.patch_size):
             predict_mask[:, :-t - 1, t] = valid_mask[:, :-t - 1] & valid_mask[:, t + 1:]
@@ -134,7 +134,7 @@ class KGPT(pl.LightningModule):
     def validation_step(self,
                         data,
                         batch_idx):
-        valid_mask = data['agent']['valid_mask'][:, :self.num_steps]
+        valid_mask = data['agent']['valid_mask'][data['agent']['target_idx'], :self.num_steps]
         predict_mask = torch.zeros_like(valid_mask).unsqueeze(-1).repeat(1, 1, self.patch_size)
         for t in range(self.patch_size):
             predict_mask[:, :-t - 1, t] = valid_mask[:, :-t - 1] & valid_mask[:, t + 1:]
@@ -333,5 +333,5 @@ class KGPT(pl.LightningModule):
         parser.add_argument('--dropout', type=float, default=0.1)
         parser.add_argument('--lr', type=float, default=1e-3)
         parser.add_argument('--weight_decay', type=float, default=0.01)
-        parser.add_argument('--patch_size', type=int, default=10)
+        parser.add_argument('--patch_size', type=int, default=5)
         return parent_parser

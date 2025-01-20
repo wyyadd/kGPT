@@ -193,7 +193,7 @@ def get_control_actions(scenario: Union[HeteroData, str, Dict], show_animation=F
 
 
 class ControlActionBuilder(BaseTransform):
-    def __init__(self, patch: int = 10) -> None:
+    def __init__(self, patch: int = 5) -> None:
         super().__init__()
         self.patch = patch
 

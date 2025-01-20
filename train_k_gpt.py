@@ -10,6 +10,7 @@ from torch_geometric.loader import DataLoader
 from datamodules import WaymoSimDataModule
 from datasets import WaymoSimDataset
 from simulators import KGPT
+from transforms import SimAgentFilter
 
 if __name__ == '__main__':
     torch.set_float32_matmul_precision("high")
@@ -59,7 +60,7 @@ if __name__ == '__main__':
             simulation_times=args.simulation_times,
             submission_dir=args.submission_dir)
         test_dataset = WaymoSimDataset(root=args.root, split=args.mode, submission_dir=args.submission_dir,
-                                       interactive=args.interactive)
+                                       interactive=args.interactive, transform=SimAgentFilter(1024))
         dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers,
                                 shuffle=False, pin_memory=args.pin_memory, persistent_workers=args.persistent_workers)
         trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices,

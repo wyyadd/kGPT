@@ -40,8 +40,8 @@ class WaymoSimDataModule(pl.LightningDataModule):
                  val_processed_dir: Optional[str] = None,
                  test_processed_dir: Optional[str] = None,
                  train_transform: Optional[Callable] = Compose([SimAgentFilter(64), ControlActionBuilder()]),
-                 val_transform: Optional[Callable] = Compose([ControlActionBuilder()]),
-                 test_transform: Optional[Callable] = None,
+                 val_transform: Optional[Callable] = Compose([SimAgentFilter(1024), ControlActionBuilder()]),
+                 test_transform: Optional[Callable] = SimAgentFilter(1024),
                  **kwargs) -> None:
         super(WaymoSimDataModule, self).__init__()
         self.train_dataset = None

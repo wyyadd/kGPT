@@ -40,7 +40,8 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt_path', type=str, default=None)
     parser.add_argument('--mode', type=str, default="train")
     parser.add_argument('--simulation_times', type=int, default=32)
-    parser.add_argument('--patch_size', type=int, default=5)
+    parser.add_argument('--patch_size', type=int, default=10)
+    parser.add_argument('--grad_batch_size', type=int, default=1)
     KGPT.add_model_specific_args(parser)
     args = parser.parse_args()
     print(args)
@@ -53,7 +54,7 @@ if __name__ == '__main__':
         trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices, num_nodes=args.num_nodes,
                              strategy=DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
                              callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs,
-                             precision="bf16-mixed", accumulate_grad_batches=5)
+                             precision="bf16-mixed", accumulate_grad_batches=args.grad_batch_size)
         trainer.fit(model, datamodule, ckpt_path=args.ckpt_path)
     else:
         model = KGPT.load_from_checkpoint(

@@ -16,7 +16,6 @@ from typing import List, Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_scatter import segment_csr
 
 from losses.gaussian_nll_loss import GaussianNLLLoss
 from losses.laplace_nll_loss import LaplaceNLLLoss
@@ -64,6 +63,7 @@ class MixtureNLLLoss(nn.Module):
             if ptr is None:
                 nll = nll.sum(dim=0, keepdim=True)
             else:
+                from torch_scatter import segment_csr
                 nll = segment_csr(src=nll, indptr=ptr, reduce='sum')
         else:
             pass

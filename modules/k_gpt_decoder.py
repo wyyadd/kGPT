@@ -189,18 +189,14 @@ class KGPTDecoder(nn.Module):
              rel_head_a2a], dim=-1)
         r_a2a = self.r_a2a_emb(continuous_inputs=r_a2a, categorical_embs=None)
 
-        x_a_full = x_a
+        x_a_env = x_a.transpose(0, 1).reshape(-1, self.hidden_dim)
         x_a = x_a[target].reshape(-1, self.hidden_dim)
         for i in range(self.num_layers):
             x_a = self.t_attn_layers[i](x_a, r_t, edge_index_t, valid_index=valid_index_t)
             x_a = self.m2a_attn_layers[i]((x_m, x_a), r_m2a, edge_index_m2a, valid_index=(valid_index_m, valid_index_t))
-            x_a = x_a.reshape(-1, self.num_steps, self.hidden_dim)
-            x_a_full[target] = x_a
-            x_a_full = x_a_full.transpose(0, 1).reshape(-1, self.hidden_dim)
-            x_a = x_a.transpose(0, 1).reshape(-1, self.hidden_dim)
-            x_a = self.a2a_attn_layers[i]((x_a_full, x_a), r_a2a, edge_index_a2a, valid_index=(valid_index_s_j,valid_index_s_i))
+            x_a = x_a.reshape(-1, self.num_steps, self.hidden_dim).transpose(0, 1).reshape(-1, self.hidden_dim)
+            x_a = self.a2a_attn_layers[i]((x_a_env, x_a), r_a2a, edge_index_a2a, valid_index=(valid_index_s_j,valid_index_s_i))
             x_a = x_a.reshape(self.num_steps, -1, self.hidden_dim).transpose(0, 1).reshape(-1, self.hidden_dim)
-            x_a_full = x_a_full.reshape(self.num_steps, -1, self.hidden_dim).transpose(0, 1)
         # [steps*agents, dim, patch]
         h = x_a
         x_a = x_a.new_zeros(*x_a.shape, self.patch_size)

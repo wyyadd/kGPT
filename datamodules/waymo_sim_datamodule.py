@@ -29,6 +29,8 @@ class WaymoSimDataModule(pl.LightningDataModule):
                  train_batch_size: int,
                  val_batch_size: int,
                  test_batch_size: int,
+                 patch_size: int,
+                 max_num_agents: int,
                  shuffle: bool = True,
                  num_workers: int = 0,
                  pin_memory: bool = True,
@@ -39,7 +41,6 @@ class WaymoSimDataModule(pl.LightningDataModule):
                  train_processed_dir: Optional[str] = None,
                  val_processed_dir: Optional[str] = None,
                  test_processed_dir: Optional[str] = None,
-                 patch_size: int = 5,
                  **kwargs) -> None:
         super(WaymoSimDataModule, self).__init__()
         self.train_dataset = None
@@ -61,7 +62,8 @@ class WaymoSimDataModule(pl.LightningDataModule):
         self.val_processed_dir = val_processed_dir
         self.test_processed_dir = test_processed_dir
         self.patch_size = patch_size
-        self.train_transform = Compose([SimAgentFilter(64), ControlActionBuilder(patch_size)])
+        self.max_num_agents = max_num_agents
+        self.train_transform = Compose([SimAgentFilter(max_num_agents), ControlActionBuilder(patch_size)])
         self.val_transform = Compose([SimAgentFilter(1024), ControlActionBuilder(patch_size)])
         self.test_transform = SimAgentFilter(1024)
 

@@ -64,7 +64,7 @@ class WaymoSimDataModule(pl.LightningDataModule):
         self.patch_size = patch_size
         self.max_num_agents = max_num_agents
         self.train_transform = Compose([SimAgentFilter(max_num_agents), ControlActionBuilder(patch_size)])
-        self.val_transform = Compose([SimAgentFilter(1024), ControlActionBuilder(patch_size)])
+        self.val_transform = Compose([SimAgentFilter(max_num_agents), ControlActionBuilder(patch_size)])
         self.test_transform = SimAgentFilter(1024)
 
     def prepare_data(self) -> None:

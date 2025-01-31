@@ -72,16 +72,12 @@ class WaymoSimDataModule(pl.LightningDataModule):
                         self.train_transform)
         WaymoSimDataset(self.root, 'val', self.interactive, self.val_raw_dir, self.val_processed_dir,
                         self.val_transform)
-        WaymoSimDataset(self.root, 'test', self.interactive, self.test_raw_dir, self.test_processed_dir,
-                        self.test_transform)
 
     def setup(self, stage: Optional[str] = None) -> None:
         self.train_dataset = WaymoSimDataset(self.root, 'train', self.interactive, self.train_raw_dir,
                                              self.train_processed_dir, self.train_transform)
         self.val_dataset = WaymoSimDataset(self.root, 'val', self.interactive, self.val_raw_dir, self.val_processed_dir,
                                            self.val_transform)
-        self.test_dataset = WaymoSimDataset(self.root, 'test', self.interactive, self.test_raw_dir,
-                                            self.test_processed_dir, self.test_transform)
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.train_batch_size, shuffle=self.shuffle,
@@ -90,10 +86,5 @@ class WaymoSimDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False,
-                          num_workers=self.num_workers, pin_memory=self.pin_memory,
-                          persistent_workers=self.persistent_workers)
-
-    def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.test_batch_size, shuffle=False,
                           num_workers=self.num_workers, pin_memory=self.pin_memory,
                           persistent_workers=self.persistent_workers)

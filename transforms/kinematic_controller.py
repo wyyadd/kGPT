@@ -32,7 +32,7 @@ class KinematicControl:
         self.x = self.ref_x[0].clone()
         self.y = self.ref_y[0].clone()
         self.yaw = self.ref_yaw[0].clone()
-        self.v = ref_v.clone()
+        self.v = ref_v[0].clone()
 
         self.delta = torch.zeros_like(ref_yaw)
         self.acc = torch.zeros_like(ref_yaw)
@@ -41,12 +41,10 @@ class KinematicControl:
 
         self.de = torch.tensor([])
 
-    def update(self, acceleration, delta):
+    def update(self, acceleration, delta, idx):
         """
         Update the state of the vehicle. Stanley Control uses bicycle model.
         """
-        # delta = torch.clip(delta, -self.max_steering_angle, self.max_steering_angle)
-        # self.yaw += self.v / wheel_base * torch.tan(delta) * self.dt
         self.yaw += delta * self.dt
         self.yaw = wrap_angle(self.yaw)
 
@@ -70,18 +68,17 @@ class KinematicControl:
         acc = (delta_d / self.dt - self.v) / self.dt
         yaw = torch.arctan2(self.ref_y[target_idx] - self.y, self.ref_x[target_idx] - self.x)
         delta = (yaw - self.yaw) / self.dt
-        if delta_d < 0.03 and torch.abs(delta) > torch.pi / 2:
-            acc = -self.v / self.dt
-            delta = 0
-        # else:
-        #     print(target_idx, delta_d, yaw - self.yaw)
+        if torch.abs(self.ref_v[target_idx] - delta_d / self.dt) < 0.03:
+            acc = i-self.v / self.dt
+        if torch.abs(self.ref_yaw[target_idx] - yaw) < 0.03:
+            delta = (self.ref_yaw[target_idx] - self.yaw) / self.dt
         return acc, delta
 
     def step(self, target_idx):
         acc, delta = self.calculate_direct_control(target_idx)
         self.acc[target_idx] = acc
         self.delta[target_idx] = delta
-        self.update(acc, delta)
+        self.update(acc, delta, target_idx)
 
     def run(self, show_animation=False, generate_metrics=False):
         time = 0.0
@@ -143,17 +140,23 @@ class KinematicControl:
             plt.show()
 
 
-def get_control_actions(scenario: Union[HeteroData, str, Dict], show_animation=False, generate_metrics=False):
+def get_control_actions(scenario: Union[HeteroData, str, Dict], target_index: torch.Tensor = None,
+                        show_animation=False, generate_metrics=False):
     if isinstance(scenario, str):
         with open(scenario, "rb") as f:
             scenario = pickle.load(f)
+
+    if target_index is None:
+        target_index = scenario["agent"]["heading"].new_tensor([scenario['agent']['av_index']], dtype=torch.long)
+        target_index = torch.cat([target_index, torch.where(scenario['agent']['target_mask'])[0]], dim=0)
+        target_index = torch.unique(target_index)
 
     delta_time = 0.1
     acceleration = torch.zeros_like(scenario["agent"]["heading"])
     delta = torch.zeros_like(scenario["agent"]["heading"])
     ade = torch.tensor([])
 
-    for agent_idx in range(scenario["agent"]["num_nodes"]):
+    for agent_idx in target_index:
         valid_mask = scenario["agent"]["valid_mask"][agent_idx]
         mask_diff = torch.diff(valid_mask.int())
         segment_starts = (mask_diff == 1).nonzero(as_tuple=True)[0] + 1
@@ -170,18 +173,7 @@ def get_control_actions(scenario: Union[HeteroData, str, Dict], show_animation=F
             cyaw = scenario["agent"]["heading"][agent_idx, start:end]
             cx = scenario["agent"]["position"][agent_idx, start:end, 0]
             cy = scenario["agent"]["position"][agent_idx, start:end, 1]
-
-            if (cx == cx[0]).all() and (cy == cy[0]).all():
-                continue
-
-            cv = torch.hypot(scenario["agent"]["velocity"][agent_idx, start, 0],
-                             scenario["agent"]["velocity"][agent_idx, start, 1])
-
-            # cv = torch.zeros_like(cyaw)
-            # temp = scenario["agent"]["position"][agent_idx, start:end, :2]
-            # cv[1:] = torch.norm(temp[1:] - temp[:-1], p=2, dim=-1) / delta_time
-            # cv[0] = torch.hypot(scenario["agent"]["velocity"][agent_idx, start, 0],
-            #                     scenario["agent"]["velocity"][agent_idx, start, 1])
+            cv = torch.norm(scenario["agent"]["velocity"][agent_idx, start:end, :2], p=2, dim=-1)
 
             control = KinematicControl(cx, cy, cyaw, cv, length, dt=delta_time)
             control.run(show_animation, generate_metrics)
@@ -189,6 +181,8 @@ def get_control_actions(scenario: Union[HeteroData, str, Dict], show_animation=F
             acceleration[agent_idx, start:end] = a
             delta[agent_idx, start:end] = d
             ade = torch.cat((ade, control.de), dim=-1)
+            print(control.de)
+            break
     return acceleration, delta, ade.mean()
 
 
@@ -203,9 +197,7 @@ class ControlActionBuilder(BaseTransform):
         # num_agent, steps, patch_size, 3 -> acceleration, delta, height
         data['agent']['target'] = pos.new_zeros(target_idx.numel(), pos.shape[1], self.patch, 3)
         delta_height = pos[:, 1:, 2] - pos[:, :-1, 2]
-        acc = data['agent']['acc']
-        delta = data['agent']['delta']
-        # acc, delta, _ = get_control_actions(data)
+        acc, delta, _ = get_control_actions(data, target_idx)
         for t in range(self.patch):
             data['agent']['target'][:, :-t - 1, t, 0] = acc[target_idx, t + 1:]
             data['agent']['target'][:, :-t - 1, t, 1] = delta[target_idx, t + 1:]
@@ -220,7 +212,8 @@ def calculate_metrics():
     with ProcessPoolExecutor() as executor:
         futures = []
         for pkl_file in predicted_files:
-            futures.append(executor.submit(get_control_actions, os.path.join(target_folder, pkl_file), False, True))
+            futures.append(executor.submit(
+                get_control_actions, os.path.join(target_folder, pkl_file), None, False, True))
 
         for future in tqdm(as_completed(futures), total=len(futures)):
             _, _, ade = future.result()
@@ -229,3 +222,8 @@ def calculate_metrics():
     with open("ade.pkl", "wb") as f:
         pickle.dump(total_ade, f)
     print(total_ade.shape, total_ade.mean())
+
+
+if __name__ == "__main__":
+    _, _, ade = get_control_actions("../data/output_files/1f1116bffda124d5.pkl", None, True, True)
+    print(ade.shape, ade.mean())

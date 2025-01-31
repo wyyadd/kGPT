@@ -27,7 +27,6 @@ from torch_geometric.data import Dataset
 from torch_geometric.data import HeteroData
 from tqdm import tqdm
 
-from transforms import get_control_actions
 from utils import interp_arc
 
 try:
@@ -205,10 +204,6 @@ class WaymoSimDataset(Dataset):
             data['scenario_id'] = scenario.scenario_id
             data['agent'] = self.get_agent_features(scenario)
             data['map_point'] = self.get_map_features(scenario)
-            # generate control action
-            acc, delta, _ = get_control_actions(data)
-            data["agent"]["acc"] = acc
-            data["agent"]["delta"] = delta
             # data['traffic_light'] = self.get_signal_features(scenario)
             with open(os.path.join(self.processed_dir, f'{scenario.scenario_id}.pkl'), 'wb') as handle:
                 pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)

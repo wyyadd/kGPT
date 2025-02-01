@@ -10,7 +10,6 @@ from torch_geometric.loader import DataLoader
 from datamodules import WaymoSimDataModule
 from datasets import WaymoSimDataset
 from simulators import KGPT
-from transforms import SimAgentFilter
 
 if __name__ == '__main__':
     torch.set_float32_matmul_precision("high")
@@ -56,8 +55,7 @@ if __name__ == '__main__':
         trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices, num_nodes=args.num_nodes,
                              strategy=DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
                              callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs,
-                             precision=args.precision, accumulate_grad_batches=args.grad_batch_size,
-                             gradient_clip_val=1.0)
+                             precision=args.precision, accumulate_grad_batches=args.grad_batch_size)
         trainer.fit(model, datamodule, ckpt_path=args.ckpt_path)
     else:
         model = KGPT.load_from_checkpoint(
@@ -65,7 +63,7 @@ if __name__ == '__main__':
             simulation_times=args.simulation_times,
             submission_dir=args.submission_dir)
         test_dataset = WaymoSimDataset(root=args.root, split=args.mode, submission_dir=args.submission_dir,
-                                       interactive=args.interactive, transform=SimAgentFilter(1024))
+                                       interactive=args.interactive)
         dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers,
                                 shuffle=False, pin_memory=args.pin_memory, persistent_workers=args.persistent_workers)
         trainer = pl.Trainer(accelerator=args.accelerator, devices=args.devices,

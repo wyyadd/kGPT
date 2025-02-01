@@ -14,22 +14,22 @@ class KGPTHead(nn.Module):
                  hidden_dim: int,
                  num_modes: int,
                  patch_size: int,
-                 acc_dim: int,
-                 delta_dim: int,
-                 height_dim: int = 1) -> None:
+                 delta_v_dim: int,
+                 delta_yaw_dim: int,
+                 delta_h_dim: int = 1) -> None:
         super(KGPTHead, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_modes = num_modes
-        self.acc_dim = acc_dim
-        self.delta_dim = delta_dim
-        self.height_dim = height_dim
+        self.delta_v_dim = delta_v_dim
+        self.delta_yaw_dim = delta_yaw_dim
+        self.delta_h_dim = delta_h_dim
         self.patch_size = patch_size
 
         self.to_pi = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim, output_dim=num_modes)
         self.to_control_action = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim,
-                                          output_dim=(acc_dim + delta_dim + height_dim) * num_modes)
+                                          output_dim=(delta_v_dim + delta_yaw_dim + delta_h_dim) * num_modes)
         self.to_scale = MLPLayer(input_dim=hidden_dim, hidden_dim=hidden_dim,
-                                 output_dim=(acc_dim + delta_dim + height_dim) * num_modes)
+                                 output_dim=(delta_v_dim + delta_yaw_dim + delta_h_dim) * num_modes)
         self.apply(weight_init)
 
     def forward(self, x_a: torch.Tensor) -> Dict[str, torch.Tensor]:
@@ -41,31 +41,31 @@ class KGPTHead(nn.Module):
         control_action = self.to_control_action(x_a)
         scale = self.to_scale(x_a)
 
-        acc, delta, height = control_action.split([self.acc_dim * self.num_modes,
-                                                   self.delta_dim * self.num_modes,
-                                                   self.height_dim * self.num_modes], dim=-1)
-        acc_scale, delta_scale, height_scale = scale.split([self.acc_dim * self.num_modes,
-                                                            self.delta_dim * self.num_modes,
-                                                            self.height_dim * self.num_modes], dim=-1)
+        delta_v, delta_yaw, delta_h = control_action.split([self.delta_v_dim * self.num_modes,
+                                                            self.delta_yaw_dim * self.num_modes,
+                                                            self.delta_h_dim * self.num_modes], dim=-1)
+        v_scale, yaw_scale, h_scale = scale.split([self.delta_v_dim * self.num_modes,
+                                                   self.delta_yaw_dim * self.num_modes,
+                                                   self.delta_h_dim * self.num_modes], dim=-1)
         # constrain to [-pi,pi] same to target
-        delta = torch.tanh(delta) * math.pi
-        acc_scale = F.elu(acc_scale, alpha=1.0) + 1.0
-        delta_scale = 1.0 / (F.elu(delta_scale, alpha=1.0) + 1.0 + 1e-4)
-        height_scale = F.elu(height_scale, alpha=1.0) + 1.0
+        delta_yaw = torch.tanh(delta_yaw) * math.pi
+        v_scale = F.elu(v_scale, alpha=1.0) + 1.0
+        yaw_scale = 1.0 / (F.elu(yaw_scale, alpha=1.0) + 1.0 + 1e-4)
+        h_scale = F.elu(h_scale, alpha=1.0) + 1.0
 
-        acc = acc.reshape(*x_a.shape[:2], -1, self.num_modes, self.acc_dim).transpose(-3, -2)
-        delta = delta.reshape(*x_a.shape[:2], -1, self.num_modes, self.delta_dim).transpose(-3, -2)
-        height = height.reshape(*x_a.shape[:2], -1, self.num_modes, self.height_dim).transpose(-3, -2)
-        acc_scale = acc_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.acc_dim).transpose(-3, -2)
-        delta_scale = delta_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.delta_dim).transpose(-3, -2)
-        height_scale = height_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.height_dim).transpose(-3, -2)
+        delta_v = delta_v.reshape(*x_a.shape[:2], -1, self.num_modes, self.delta_v_dim).transpose(-3, -2)
+        delta_yaw = delta_yaw.reshape(*x_a.shape[:2], -1, self.num_modes, self.delta_yaw_dim).transpose(-3, -2)
+        delta_h = delta_h.reshape(*x_a.shape[:2], -1, self.num_modes, self.delta_h_dim).transpose(-3, -2)
+        v_scale = v_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.delta_v_dim).transpose(-3, -2)
+        yaw_scale = yaw_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.delta_yaw_dim).transpose(-3, -2)
+        h_scale = h_scale.reshape(*x_a.shape[:2], -1, self.num_modes, self.delta_h_dim).transpose(-3, -2)
 
         return {
             "pi": pi,
-            "acc": acc,
-            "delta": delta,
-            "height": height,
-            "acc_scale": acc_scale,
-            "delta_scale": delta_scale,
-            "height_scale": height_scale
+            "delta_v": delta_v,
+            "delta_yaw": delta_yaw,
+            "delta_h": delta_h,
+            "v_scale": v_scale,
+            "yaw_scale": yaw_scale,
+            "h_scale": h_scale
         }

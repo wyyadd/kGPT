@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
-import torch.nn.functional as F
 from torch_geometric.data import HeteroData
 from torch_geometric.transforms import BaseTransform
 

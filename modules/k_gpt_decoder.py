@@ -53,7 +53,7 @@ class KGPTDecoder(nn.Module):
         self.head_dim = head_dim
         self.dropout = dropout
 
-        num_agent_types = 6
+        num_agent_types = 5
         num_map_types = 17
         input_dim_x_a = 5
         input_dim_x_m = 2
@@ -104,22 +104,16 @@ class KGPTDecoder(nn.Module):
 
         x_a = torch.stack(
             [torch.norm(vel[:, :, :2], p=2, dim=-1),
-             head_a,
+             angle_between_2d_vectors(ctr_vector=head_vector_a, nbr_vector=vel[:, :, :2]),
              length,
              width,
              height], dim=-1)
         type_a_emb = [self.type_a_emb(data['agent']['type'].long()).repeat_interleave(repeats=self.num_steps, dim=0)]
         valid_index_t = torch.where(mask.view(-1))[0]
-        x_a = self.x_a_emb(continuous_inputs=x_a.view(-1, x_a.size(-1)), categorical_embs=type_a_emb,
-                           valid_index=valid_index_t)
+        x_a = self.x_a_emb(continuous_inputs=x_a.view(-1, x_a.size(-1)), categorical_embs=type_a_emb, valid_index=valid_index_t)
         x_a = x_a.view(-1, self.num_steps, self.hidden_dim)
 
-        if self.input_dim == 2:
-            x_m = data['map_point']['magnitude'].unsqueeze(-1)
-        elif self.input_dim == 3:
-            x_m = torch.stack([data['map_point']['magnitude'], data['map_point']['height']], dim=-1)
-        else:
-            raise ValueError('{} is not a valid dimension'.format(self.input_dim))
+        x_m = torch.stack([data['map_point']['magnitude'], data['map_point']['height']], dim=-1)
         type_m_emb = [self.type_m_emb(data['map_point']['type'].long())]
         x_m = self.x_m_emb(continuous_inputs=x_m, categorical_embs=type_m_emb)
 
@@ -195,7 +189,7 @@ class KGPTDecoder(nn.Module):
             x_a = self.t_attn_layers[i](x_a, r_t, edge_index_t, valid_index=valid_index_t)
             x_a = self.m2a_attn_layers[i]((x_m, x_a), r_m2a, edge_index_m2a, valid_index=(valid_index_m, valid_index_t))
             x_a = x_a.reshape(-1, self.num_steps, self.hidden_dim).transpose(0, 1).reshape(-1, self.hidden_dim)
-            x_a = self.a2a_attn_layers[i]((x_a_env, x_a), r_a2a, edge_index_a2a, valid_index=(valid_index_s_j,valid_index_s_i))
+            x_a = self.a2a_attn_layers[i]((x_a_env, x_a), r_a2a, edge_index_a2a, valid_index=(valid_index_s_j, valid_index_s_i))
             x_a = x_a.reshape(self.num_steps, -1, self.hidden_dim).transpose(0, 1).reshape(-1, self.hidden_dim)
         # [steps*agents, dim, patch]
         h = x_a

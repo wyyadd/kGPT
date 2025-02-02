@@ -199,23 +199,23 @@ class KGPT(pl.LightningModule):
                 cos, sin = yaw.cos(), yaw.sin()
                 rot_mat = torch.stack([torch.stack([cos, sin], dim=-1),
                                        torch.stack([-sin, cos], dim=-1)], dim=-2)
-                yaw = yaw.reshape(yaw.size(0), 1, 1)
-                yaw = yaw + (delta_yaw * interval).cumsum(dim=1)
+                yaw = yaw.reshape(yaw.size(0), 1, 1) + delta_yaw
                 yaw = wrap_angle(yaw)
 
                 # velocity
-                vel = data['agent']['velocity'][:, start_steps - 1, :self.vel_dim]
-                vel = vel.reshape(vel.size(0), 1, self.vel_dim)
-                vel = vel + ((delta_v * interval) @ rot_mat).cumsum(dim=1)
+                pre_vel = data['agent']['velocity'][:, start_steps - 1, :self.vel_dim]
+                pre_vel = pre_vel.reshape(pre_vel.size(0), 1, self.vel_dim)
+                vel = pre_vel + (delta_v @ rot_mat)
 
                 # position
+                pre_vel = torch.cat([pre_vel, vel], dim=1)
                 position_xy = data['agent']['position'][:, start_steps - 1, :2]
                 position_xy = position_xy.reshape(position_xy.size(0), 1, 2)
-                position_xy = position_xy + (vel * interval).cumsum(dim=1)
+                position_xy = position_xy + ((pre_vel[:, 1:] + pre_vel[:, :-1]) * interval / 2).cumsum(dim=1)
 
                 position_z = data['agent']['position'][:, start_steps - 1, 2]
                 position_z = position_z.reshape(position_z.size(0), 1, 1)
-                position_z = position_z + delta_h.cumsum(dim=1)
+                position_z = position_z + delta_h
 
                 # update
                 data['agent']['velocity'][:, start_steps:end_steps, :self.vel_dim] = vel

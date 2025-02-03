@@ -35,11 +35,19 @@ class SimTargetBuilder(BaseTransform):
 
         # num_agent, steps, patch_size, 4
         data['agent']['target'] = pos.new_zeros(target_idx.numel(), pos.size(-2), self.patch, 4)
+        delta_v = ((vel[:, 1:, :2] - vel[:, :-1, :2]).unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
+        delta_h = pos[:, 1:, 2] - pos[:, :-1, 2]
+        delta_yaw = wrap_angle(head[:, 1:] - head[:, :-1])
 
         for t in range(self.patch):
             #  target: 0-2: delta_v (acc), 2: delta_h, 3: delta_yaw
-            data['agent']['target'][:, :-t - 1, t, :2] = ((vel[:, t + 1:, :2] - vel[:, :-t - 1, :2]).unsqueeze(-2) @
-                                                          rot_mat[:, :-t - 1]).squeeze(-2)
-            data['agent']['target'][:, :-t - 1, t, 2] = pos[:, t + 1:, 2] - pos[:, :-t - 1, 2]
-            data['agent']['target'][:, :-t - 1, t, 3] = wrap_angle(head[:, t + 1:] - head[:, : -t - 1])
+            data['agent']['target'][:, :-t - 1, t, :2] = delta_v[:, t:]
+            data['agent']['target'][:, :-t - 1, t, 2] = delta_h[:, t:]
+            data['agent']['target'][:, :-t - 1, t, 3] = delta_yaw[:, t:]
+        # for t in range(self.patch):
+        #     #  target: 0-2: delta_v (acc), 2: delta_h, 3: delta_yaw
+        #     data['agent']['target'][:, :-t - 1, t, :2] = ((vel[:, t + 1:, :2] - vel[:, :-t - 1, :2]).unsqueeze(-2) @
+        #                                                   rot_mat[:, :-t - 1]).squeeze(-2)
+        #     data['agent']['target'][:, :-t - 1, t, 2] = pos[:, t + 1:, 2] - pos[:, :-t - 1, 2]
+        #     data['agent']['target'][:, :-t - 1, t, 3] = wrap_angle(head[:, t + 1:] - head[:, : -t - 1])
         return data

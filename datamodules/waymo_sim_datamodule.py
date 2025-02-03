@@ -19,6 +19,7 @@ from torch_geometric.transforms import Compose
 
 from datasets import WaymoSimDataset
 from transforms import SimAgentFilter, SimTargetBuilder
+from transforms.velocity_filter import VelocityFilter
 
 
 class WaymoSimDataModule(pl.LightningDataModule):
@@ -63,20 +64,21 @@ class WaymoSimDataModule(pl.LightningDataModule):
         self.test_processed_dir = test_processed_dir
         self.patch_size = patch_size
         self.max_num_agents = max_num_agents
-        self.train_transform = Compose([SimAgentFilter(max_num_agents), SimTargetBuilder(patch_size)])
-        self.val_transform = Compose([SimAgentFilter(max_num_agents), SimTargetBuilder(patch_size)])
+        self.train_transform = Compose([VelocityFilter(), SimAgentFilter(max_num_agents), SimTargetBuilder(patch_size)])
+        self.val_transform = Compose([VelocityFilter(), SimAgentFilter(max_num_agents), SimTargetBuilder(patch_size)])
 
     def prepare_data(self) -> None:
-        WaymoSimDataset(self.root, 'train', self.interactive, self.train_raw_dir, self.train_processed_dir,
-                        self.train_transform)
+        # WaymoSimDataset(self.root, 'train', self.interactive, self.train_raw_dir, self.train_processed_dir,
+        #                 self.train_transform)
         WaymoSimDataset(self.root, 'val', self.interactive, self.val_raw_dir, self.val_processed_dir,
                         self.val_transform)
 
     def setup(self, stage: Optional[str] = None) -> None:
-        self.train_dataset = WaymoSimDataset(self.root, 'train', self.interactive, self.train_raw_dir,
-                                             self.train_processed_dir, self.train_transform)
+        # self.train_dataset = WaymoSimDataset(self.root, 'train', self.interactive, self.train_raw_dir,
+        #                                      self.train_processed_dir, self.train_transform)
         self.val_dataset = WaymoSimDataset(self.root, 'val', self.interactive, self.val_raw_dir, self.val_processed_dir,
                                            self.val_transform)
+        self.train_dataset = self.val_dataset
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.train_batch_size, shuffle=self.shuffle,

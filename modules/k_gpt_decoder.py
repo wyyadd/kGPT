@@ -72,7 +72,7 @@ class KGPTDecoder(nn.Module):
 
         self.t_attn_layers = nn.ModuleList(
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
-                            bipartite=False, has_pos_emb=True) for _ in range(num_layers + 1)]
+                            bipartite=False, has_pos_emb=True) for _ in range(num_layers + patch_size)]
         )
         self.m2a_attn_layers = nn.ModuleList(
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
@@ -195,7 +195,7 @@ class KGPTDecoder(nn.Module):
         h = x_a
         x_a = x_a.new_zeros(*x_a.shape, self.patch_size)
         for i in range(self.patch_size):
-            out = self.t_attn_layers[self.num_layers](h, r_t, edge_index_t, valid_index=valid_index_t)
+            out = self.t_attn_layers[self.num_layers + i](h, r_t, edge_index_t, valid_index=valid_index_t)
             h = self.to_input(torch.cat([self.h_norm(h), self.out_norm(out)], dim=-1))
             x_a[..., i] = out
         return x_a.reshape(-1, self.num_steps, self.hidden_dim, self.patch_size)

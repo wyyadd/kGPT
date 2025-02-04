@@ -20,6 +20,7 @@ from torch_geometric.data import HeteroData
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.utils import subgraph
 
+from layers import MLPLayer
 from layers.attention_layer import AttentionLayer
 from layers.fourier_embedding import FourierEmbedding
 from utils import angle_between_2d_vectors
@@ -84,7 +85,7 @@ class KGPTDecoder(nn.Module):
         )
         self.h_norm = nn.RMSNorm(hidden_dim)
         self.out_norm = nn.RMSNorm(hidden_dim)
-        self.to_input = nn.Linear(hidden_dim * 2, hidden_dim)
+        self.to_input = MLPLayer(hidden_dim * 2, hidden_dim, hidden_dim)
         self.apply(weight_init)
 
     def forward(self,

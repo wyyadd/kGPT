@@ -91,16 +91,16 @@ class KGPTDecoder(nn.Module):
                 data: HeteroData) -> torch.Tensor:
         mask = data['agent']['valid_mask'][:, :self.num_steps].contiguous()
         pos_a = data['agent']['position'][:, :self.num_steps, :self.input_dim].contiguous()
-        vel = data['agent']['velocity'][:, :self.num_steps, :self.input_dim].contiguous()
-        head_a = torch.arctan2(vel[..., 1], vel[..., 0])
-        # head_a = data['agent']['heading'][:, :self.num_steps].contiguous()
+        head_a = data['agent']['heading'][:, :self.num_steps].contiguous()
         head_vector_a = torch.stack([head_a.cos(), head_a.sin()], dim=-1)
         pos_m = data['map_point']['position'][:, :self.input_dim].contiguous()
         orient_m = data['map_point']['orientation'].contiguous()
+        target = data['agent']['target_idx'].contiguous()
+
+        vel = data['agent']['velocity'][:, :self.num_steps, :self.input_dim].contiguous()
         length = data['agent']['length'][:, :self.num_steps].contiguous()
         width = data['agent']['width'][:, :self.num_steps].contiguous()
         height = data['agent']['height'][:, :self.num_steps].contiguous()
-        target = data['agent']['target_idx'].contiguous()
 
         x_a = torch.stack(
             [torch.norm(vel[:, :, :2], p=2, dim=-1),

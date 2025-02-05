@@ -11,7 +11,7 @@ from torch_geometric.data import HeteroData
 from losses import MixtureNLLLoss, NLLLoss
 from modules import KGPTDecoder
 from modules.k_gpt_head import KGPTHead
-from utils import unbatch
+from utils import unbatch, wrap_angle
 
 
 class KGPT(pl.LightningModule):
@@ -85,7 +85,7 @@ class KGPT(pl.LightningModule):
             num_modes=num_modes,
             patch_size=patch_size,
             delta_v_dim=delta_v_dim,
-            # delta_yaw_dim=delta_yaw_dim,
+            delta_yaw_dim=delta_yaw_dim,
         )
 
         if num_modes == 1:
@@ -115,8 +115,8 @@ class KGPT(pl.LightningModule):
         pred = self(data)
         pi = pred['pi']
         pred = torch.cat([
-            pred['delta_v'], pred['delta_h'],
-            pred['v_scale'], pred['h_scale']], dim=-1)
+            pred['delta_v'], pred['delta_h'], pred['delta_yaw'],
+            pred['v_scale'], pred['h_scale'], pred['yaw_scale']], dim=-1)
         target = data['agent']['target']
 
         if self.num_modes == 1:
@@ -145,8 +145,8 @@ class KGPT(pl.LightningModule):
         pred = self(data)
         pi = pred['pi']
         pred = torch.cat([
-            pred['delta_v'], pred['delta_h'],
-            pred['v_scale'], pred['h_scale']], dim=-1)
+            pred['delta_v'], pred['delta_h'], pred['delta_yaw'],
+            pred['v_scale'], pred['h_scale'], pred['yaw_scale']], dim=-1)
         target = data['agent']['target']
 
         if self.num_modes == 1:
@@ -188,26 +188,26 @@ class KGPT(pl.LightningModule):
                 # sample_inds = top_p_sampling(pi, 0.95)
                 delta_v = pred['delta_v'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
                           sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.delta_v_dim]
-                # delta_yaw = pred['delta_yaw'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
-                #             sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.delta_yaw_dim]
+                delta_yaw = pred['delta_yaw'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
+                            sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.delta_yaw_dim]
                 delta_h = pred['delta_h'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
                           sample_inds, torch.arange(num_action_steps).unsqueeze(0), :1]
 
-                # velocity
-                pre_vel = data['agent']['velocity'][:, start_steps - 1, :self.vel_dim]
-                pre_vel = pre_vel.reshape(pre_vel.size(0), 1, self.vel_dim)
-                vel = pre_vel + delta_v.cumsum(dim=1)
-
                 # yaw
-                # yaw = data['agent']['heading'][:, start_steps - 1]
-                # yaw = yaw.reshape(yaw.size(0), 1, 1) + delta_yaw.cumsum(dim=1)
-                yaw = torch.arctan2(vel[..., 1], vel[..., 0])
+                yaw = data['agent']['heading'][:, start_steps - 1]
+                cos, sin = yaw.cos(), yaw.sin()
+                rot_mat = torch.stack([torch.stack([cos, sin], dim=-1),
+                                       torch.stack([-sin, cos], dim=-1)], dim=-2)
+                yaw = yaw.reshape(yaw.size(0), 1, 1) + delta_yaw.cumsum(dim=1)
+                yaw = wrap_angle(yaw)
+
+                # velocity
+                vel = delta_v @ rot_mat
 
                 # position
-                pre_vel = torch.cat([pre_vel, vel], dim=1)
                 position_xy = data['agent']['position'][:, start_steps - 1, :2]
                 position_xy = position_xy.reshape(position_xy.size(0), 1, 2)
-                position_xy = position_xy + ((pre_vel[:, 1:] + pre_vel[:, :-1]) * interval / 2).cumsum(dim=1)
+                position_xy = position_xy + (vel * interval).cumsum(dim=1)
 
                 position_z = data['agent']['position'][:, start_steps - 1, 2]
                 position_z = position_z.reshape(position_z.size(0), 1, 1)

@@ -56,7 +56,7 @@ class KGPTDecoder(nn.Module):
 
         num_agent_types = 5
         num_map_types = 17
-        input_dim_x_a = 4
+        input_dim_x_a = 5
         input_dim_x_m = 2
         input_dim_t = 5
         input_dim_r = 4
@@ -105,7 +105,7 @@ class KGPTDecoder(nn.Module):
 
         x_a = torch.stack(
             [torch.norm(vel[:, :, :2], p=2, dim=-1),
-             # angle_between_2d_vectors(ctr_vector=head_vector_a, nbr_vector=vel[:, :, :2]),
+             angle_between_2d_vectors(ctr_vector=head_vector_a, nbr_vector=vel[:, :, :2]),
              length,
              width,
              height], dim=-1)

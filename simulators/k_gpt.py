@@ -186,7 +186,7 @@ class KGPT(pl.LightningModule):
                 pi = F.softmax(pi, dim=-1).reshape(-1, pi.size(-1))
                 sample_inds = torch.multinomial(pi, num_samples=1, replacement=True).reshape(-1, num_action_steps)
                 # sample_inds = top_p_sampling(pi, 0.95)
-                delta_v = pred['delta_v'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
+                delta_p = pred['delta_v'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
                           sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.delta_v_dim]
                 delta_yaw = pred['delta_yaw'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
                             sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.delta_yaw_dim]
@@ -194,24 +194,25 @@ class KGPT(pl.LightningModule):
                           sample_inds, torch.arange(num_action_steps).unsqueeze(0), :1]
 
                 # yaw
-                cur_yaw = data['agent']['heading'][:, start_steps - 1]
-                yaw = cur_yaw.reshape(cur_yaw.size(0), 1, 1) + delta_yaw
+                cur_yaw = data['agent']['heading'][:, [start_steps - 1]].unsqueeze(-1)
+                yaw = cur_yaw + delta_yaw.cumsum(dim=1)
                 yaw = wrap_angle(yaw)
 
-                # velocity
+                # position
+                cur_yaw = torch.cat([cur_yaw, yaw], dim=-2).squeeze(-1)
                 cos, sin = cur_yaw.cos(), cur_yaw.sin()
                 rot_mat = torch.stack([torch.stack([cos, sin], dim=-1),
                                        torch.stack([-sin, cos], dim=-1)], dim=-2)
-                vel = delta_v @ rot_mat
+                delta_p = (delta_p.unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
 
-                # position
-                position_xy = data['agent']['position'][:, start_steps - 1, :2]
-                position_xy = position_xy.reshape(position_xy.size(0), 1, 2)
-                position_xy = position_xy + (vel * interval).cumsum(dim=1)
+                position_xy = data['agent']['position'][:, [start_steps - 1], :2]
+                position_xy = position_xy + delta_p.cumsum(dim=1)
 
-                position_z = data['agent']['position'][:, start_steps - 1, 2]
-                position_z = position_z.reshape(position_z.size(0), 1, 1)
-                position_z = position_z + delta_h
+                position_z = data['agent']['position'][:, [start_steps - 1], 2].unsqueeze(-1)
+                position_z = position_z + delta_h.cumsum(dim=1)
+
+                # velocity
+                vel = delta_p / interval
 
                 # update
                 data['agent']['velocity'][:, start_steps:end_steps, :self.vel_dim] = vel

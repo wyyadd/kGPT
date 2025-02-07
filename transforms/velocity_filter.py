@@ -31,8 +31,12 @@ class VelocityFilter(BaseTransform):
 
     def __call__(self, data: HeteroData) -> HeteroData:
         # [agents, steps, xy-dim]
-        vel = data['agent']['velocity'][..., :2]
+        # vel = data['agent']['velocity'][..., :2]
+        # valid_mask = data['agent']['valid_mask']
+        # vel = self.mean_filter(vel, valid_mask)
+        # data['agent']['velocity'][..., :2] = vel
+        pos = data['agent']['position'][..., :3]
         valid_mask = data['agent']['valid_mask']
-        vel = self.mean_filter(vel, valid_mask)
-        data['agent']['velocity'][..., :2] = vel
+        pos = self.mean_filter(pos, valid_mask)
+        data['agent']['position'][..., :3] = pos
         return data

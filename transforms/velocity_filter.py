@@ -22,6 +22,7 @@ class VelocityFilter(BaseTransform):
         offset = self.window_size // 2
         # index = offset ~ (steps - window_size + offset)
         smoothed_vel[:, offset:vel.size(1) - self.window_size + offset + 1] = avg_vel
+        smoothed_vel[~valid_mask] = 0
 
         # vel_mask = torch.abs(smoothed_vel) < 0.001
         # smoothed_vel[vel_mask] = 0
@@ -31,12 +32,13 @@ class VelocityFilter(BaseTransform):
 
     def __call__(self, data: HeteroData) -> HeteroData:
         # [agents, steps, xy-dim]
-        vel = data['agent']['velocity'][..., :2]
         valid_mask = data['agent']['valid_mask']
+
+        vel = data['agent']['velocity'][..., :2]
         vel = self.mean_filter(vel, valid_mask)
         data['agent']['velocity'][..., :2] = vel
-        # pos = data['agent']['position'][..., :3]
-        # valid_mask = data['agent']['valid_mask']
-        # pos = self.mean_filter(pos, valid_mask)
-        # data['agent']['position'][..., :3] = pos
+
+        h = data['agent']['position'][..., [2]]
+        h = self.mean_filter(h, valid_mask)
+        data['agent']['position'][..., [2]] = h
         return data

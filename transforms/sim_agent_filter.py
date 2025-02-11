@@ -76,12 +76,11 @@ class SimAgentFilter(BaseTransform):
             # add context agents
             valid_nums = torch.sum(valid_mask, dim=-1)
             abs_vel = torch.abs(torch.norm(vel, p=2, dim=-1).sum(dim=-1))
-            valid_rate = abs_vel / torch.clamp(valid_nums, min=1)
-            valid_rate[agent_inds] = 0
+            avg_vel = abs_vel / torch.clamp(valid_nums, min=1)
+            avg_vel[agent_inds] = 0
 
-            num_samples = min(max_num_context_agents, (valid_rate > 0).sum().item())
-            if num_samples > 0:
-                context_agent_inds = torch.multinomial(valid_rate, num_samples=num_samples, replacement=False)
+            if (avg_vel > 0).sum() > 0:
+                context_agent_inds = torch.multinomial(avg_vel, num_samples=max_num_context_agents, replacement=False)
                 agent_inds = torch.cat([agent_inds, context_agent_inds], dim=0)
         agent_inds = torch.unique(agent_inds)
         data['agent']['target_idx'] = agent_inds

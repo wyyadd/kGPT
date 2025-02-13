@@ -124,7 +124,7 @@ class KGPT(pl.LightningModule):
         else:
             loss = self.loss(pred=pred.reshape(-1, self.num_modes, self.patch_size, pred.size(-1)),
                              target=target.reshape(-1, self.patch_size, target.size(-1)),
-                             prob=pi.reshape(-1, self.patch_size, pi.size(-1)),
+                             prob=pi.reshape(-1, pi.size(-1)),
                              mask=predict_mask.reshape(-1, self.patch_size)).reshape(-1, self.num_steps)
         loss = loss / predict_mask.sum(dim=-1).clamp(min=1)
         loss = loss[predict_mask.any(dim=-1)].mean()
@@ -154,7 +154,7 @@ class KGPT(pl.LightningModule):
         else:
             loss = self.loss(pred=pred.reshape(-1, self.num_modes, self.patch_size, pred.size(-1)),
                              target=target.reshape(-1, self.patch_size, target.size(-1)),
-                             prob=pi.reshape(-1, self.patch_size, pi.size(-1)),
+                             prob=pi.reshape(-1, pi.size(-1)),
                              mask=predict_mask.reshape(-1, self.patch_size)).reshape(-1, self.num_steps)
         loss = loss / predict_mask.sum(dim=-1).clamp(min=1)
         loss = loss[predict_mask.any(dim=-1)].mean()
@@ -183,15 +183,14 @@ class KGPT(pl.LightningModule):
                 end_steps = start_steps + num_action_steps
                 pred = self(data)
                 pi = pred['pi'][:, start_steps - 1, :num_action_steps]  # [agents, steps, patch, modes]
-                pi = F.softmax(pi, dim=-1).reshape(-1, pi.size(-1))
-                sample_inds = torch.multinomial(pi, num_samples=1, replacement=True).reshape(-1, num_action_steps)
+                sample_inds = torch.multinomial(F.softmax(pi, dim=-1), num_samples=1, replacement=True).squeeze(-1)
                 # sample_inds = top_p_sampling(pi, 0.95)
-                delta_v = pred['delta_v'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
-                          sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.delta_v_dim]
-                delta_yaw = pred['delta_yaw'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
-                            sample_inds, torch.arange(num_action_steps).unsqueeze(0), :self.delta_yaw_dim]
-                delta_h = pred['delta_h'][torch.arange(sample_inds.size(0)).unsqueeze(-1), start_steps - 1,
-                          sample_inds, torch.arange(num_action_steps).unsqueeze(0), :1]
+                delta_v = pred['delta_v'][torch.arange(pi.size(0)), start_steps - 1,
+                          sample_inds, :num_action_steps, :self.delta_v_dim]
+                delta_yaw = pred['delta_yaw'][torch.arange(pi.size(0)), start_steps - 1,
+                            sample_inds, :num_action_steps, :self.delta_yaw_dim]
+                delta_h = pred['delta_h'][torch.arange(pi.size(0)), start_steps - 1,
+                          sample_inds, :num_action_steps, :1]
 
                 # yaw
                 cur_yaw = data['agent']['heading'][:, [start_steps - 1]].unsqueeze(-1)

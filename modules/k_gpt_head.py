@@ -33,10 +33,12 @@ class KGPTHead(nn.Module):
 
     def forward(self, x_a: torch.Tensor) -> Dict[str, torch.Tensor]:
         # [agents, steps, patch, dim]
+        h = x_a[..., 0]
+        pi = self.to_pi(h)
+        x_a = x_a[..., 1:]
         x_a = x_a.transpose(-1, -2)
 
         # [agents, steps, patch, modes]
-        pi = self.to_pi(x_a)
         control_action = self.to_control_action(x_a)
         scale = self.to_scale(x_a)
 

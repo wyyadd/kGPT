@@ -194,9 +194,10 @@ class KGPTDecoder(nn.Module):
             x_a = x_a.reshape(self.num_steps, -1, self.hidden_dim).transpose(0, 1).reshape(-1, self.hidden_dim)
         # [steps*agents, dim, patch]
         h = x_a
-        x_a = x_a.new_zeros(*x_a.shape, self.patch_size)
+        x_a = x_a.new_zeros(*x_a.shape, self.patch_size + 1)
+        x_a[..., 0] = h
         for i in range(self.patch_size):
             out = self.t_attn_layers[self.num_layers](h, r_t, edge_index_t, valid_index=valid_index_t)
             h = self.to_input(torch.cat([self.h_norm(h), self.out_norm(out)], dim=-1))
-            x_a[..., i] = out
-        return x_a.reshape(-1, self.num_steps, self.hidden_dim, self.patch_size)
+            x_a[..., i + 1] = out
+        return x_a.reshape(-1, self.num_steps, self.hidden_dim, self.patch_size + 1)

@@ -57,8 +57,7 @@ class SimAgentFilter(BaseTransform):
             agent_inds = torch.cat([agent_inds, context_agent_inds], dim=0)
 
         agent_inds = torch.unique(agent_inds)
-        data['agent']['target_idx'] = agent_inds
-        return data
+        return agent_inds
 
     def new_filter(self, data: HeteroData) -> HeteroData:
         vel = data['agent']['velocity'][..., :2]
@@ -83,12 +82,22 @@ class SimAgentFilter(BaseTransform):
                 context_agent_inds = torch.multinomial(avg_vel, num_samples=max_num_context_agents, replacement=False)
                 agent_inds = torch.cat([agent_inds, context_agent_inds], dim=0)
         agent_inds = torch.unique(agent_inds)
-        data['agent']['target_idx'] = agent_inds
-        return data
+        return agent_inds
 
     def __call__(self, data: HeteroData) -> HeteroData:
         if data['agent']['num_nodes'] <= self.max_num_agents:
-            data['agent']['target_idx'] = torch.arange(data['agent']['num_nodes'], dtype=torch.long,
-                                                       device=data['agent']['position'].device)
             return data
-        return self.legacy_filter(data)
+        agent_inds = self.legacy_filter(data)
+        data['agent']['num_nodes'] = agent_inds.numel()
+        data['agent']['av_index'] = 0
+        data['agent']['valid_mask'] = data['agent']['valid_mask'][agent_inds].clone()
+        data['agent']['target_mask'] = data['agent']['target_mask'][agent_inds].clone()
+        data['agent']['id'] = data['agent']['id'][agent_inds].clone()
+        data['agent']['type'] = data['agent']['type'][agent_inds].clone()
+        data['agent']['position'] = data['agent']['position'][agent_inds].clone()
+        data['agent']['heading'] = data['agent']['heading'][agent_inds].clone()
+        data['agent']['velocity'] = data['agent']['velocity'][agent_inds].clone()
+        data['agent']['length'] = data['agent']['length'][agent_inds].clone()
+        data['agent']['width'] = data['agent']['width'][agent_inds].clone()
+        data['agent']['height'] = data['agent']['height'][agent_inds].clone()
+        return data

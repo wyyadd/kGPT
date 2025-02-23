@@ -25,34 +25,32 @@ class SimTargetBuilder(BaseTransform):
         self.patch = patch
 
     def old_target_builder(self, data: HeteroData) -> HeteroData:
-        target_idx = data['agent']['target_idx']
-        pos = data['agent']['position'][target_idx]
-        head = data['agent']['heading'][target_idx]
-        vel = data['agent']['velocity'][target_idx]
+        pos = data['agent']['position']
+        head = data['agent']['heading']
+        vel = data['agent']['velocity']
         cos, sin = head.cos(), head.sin()
         rot_mat = torch.stack([torch.stack([cos, -sin], dim=-1),
                                torch.stack([sin, cos], dim=-1)], dim=-2)
-        data['agent']['target'] = pos.new_zeros(target_idx.numel(), pos.size(-2), self.patch, 6)
+        data['agent']['target'] = pos.new_zeros(data['agent']['num_nodes'], pos.size(-2), self.patch, 6)
         for t in range(self.patch):
             data['agent']['target'][:, :-t - 1, t, :2] = ((pos[:, t + 1:, :2] - pos[:, :-t - 1, :2]).unsqueeze(-2) @
                                                           rot_mat[:, :-t - 1]).squeeze(-2)
             data['agent']['target'][:, :-t - 1, t, 2] = pos[:, t + 1:, 2] - pos[:, :-t - 1, 2]
             data['agent']['target'][:, :-t - 1, t, 3:5] = (vel[:, t + 1:, :2].unsqueeze(-2) @
-                                                            rot_mat[:, :-t - 1]).squeeze(-2)
+                                                           rot_mat[:, :-t - 1]).squeeze(-2)
             data['agent']['target'][:, :-t - 1, t, 5] = wrap_angle(head[:, t + 1:] - head[:, :-t - 1])
         return data
 
     def new_target_builder(self, data: HeteroData) -> HeteroData:
-        target_idx = data['agent']['target_idx']
-        pos = data['agent']['position'][target_idx]
-        head = data['agent']['heading'][target_idx]
-        vel = data['agent']['velocity'][target_idx]
+        pos = data['agent']['position']
+        head = data['agent']['heading']
+        vel = data['agent']['velocity']
         cos, sin = head.cos(), head.sin()
         rot_mat = torch.stack([torch.stack([cos, -sin], dim=-1),
                                torch.stack([sin, cos], dim=-1)], dim=-2)
 
         # num_agent, steps, patch_size, 3
-        data['agent']['target'] = pos.new_zeros(target_idx.numel(), pos.size(-2), self.patch, 6)
+        data['agent']['target'] = pos.new_zeros(data['agent']['num_nodes'], pos.size(-2), self.patch, 6)
         delta_p = ((pos[:, 1:, :2] - pos[:, :-1, :2]).unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
         delta_v = (vel[:, 1:, :2].unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
         delta_h = pos[:, 1:, 2] - pos[:, :-1, 2]

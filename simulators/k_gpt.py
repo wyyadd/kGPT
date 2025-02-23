@@ -104,7 +104,7 @@ class KGPT(pl.LightningModule):
     def training_step(self,
                       data,
                       batch_idx):
-        valid_mask = data['agent']['valid_mask'][data['agent']['target_idx'], :self.num_steps]
+        valid_mask = data['agent']['valid_mask'][:, :self.num_steps]
         predict_mask = torch.zeros_like(valid_mask).unsqueeze(-1).repeat(1, 1, self.patch_size)
         for t in range(self.patch_size):
             predict_mask[:, :-t - 1, t] = valid_mask.unfold(dimension=1, size=t + 2, step=1).all(dim=-1)
@@ -134,7 +134,7 @@ class KGPT(pl.LightningModule):
     def validation_step(self,
                         data,
                         batch_idx):
-        valid_mask = data['agent']['valid_mask'][data['agent']['target_idx'], :self.num_steps]
+        valid_mask = data['agent']['valid_mask'][:, :self.num_steps]
         predict_mask = torch.zeros_like(valid_mask).unsqueeze(-1).repeat(1, 1, self.patch_size)
         for t in range(self.patch_size):
             predict_mask[:, :-t - 1, t] = valid_mask.unfold(dimension=1, size=t + 2, step=1).all(dim=-1)
@@ -171,8 +171,6 @@ class KGPT(pl.LightningModule):
         data['agent']['length'] = data['agent']['length'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
         data['agent']['width'] = data['agent']['width'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
         data['agent']['height'] = data['agent']['height'][:, [self.num_init_steps - 1]].repeat(1, self.num_steps)
-        data['agent']['target_idx'] = torch.arange(data['agent']['num_nodes'], dtype=torch.long,
-                                                   device=eval_mask.device)
 
         traj_eval = []
         interval = 0.1

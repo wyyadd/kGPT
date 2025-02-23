@@ -56,7 +56,7 @@ if __name__ == '__main__':
                              strategy=DDPStrategy(find_unused_parameters=False, gradient_as_bucket_view=True),
                              callbacks=[model_checkpoint, lr_monitor], max_epochs=args.max_epochs,
                              precision=args.precision, accumulate_grad_batches=args.grad_batch_size,
-                             limit_val_batches=0.1)
+                             limit_val_batches=0.01)
         trainer.fit(model, datamodule, ckpt_path=args.ckpt_path)
     else:
         model = KGPT.load_from_checkpoint(

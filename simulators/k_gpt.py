@@ -129,6 +129,8 @@ class KGPT(pl.LightningModule):
         loss = loss / predict_mask.sum(dim=-1).clamp(min=1)
         loss = loss[predict_mask.any(dim=-1)].mean()
         self.log('train_loss', loss, prog_bar=True, on_step=True, on_epoch=True, batch_size=1)
+        if batch_idx % 100 == 0:
+            print('train loss', loss.item())
         return loss
 
     def validation_step(self,

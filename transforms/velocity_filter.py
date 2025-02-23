@@ -3,7 +3,7 @@ from torch_geometric.data import HeteroData
 from torch_geometric.transforms import BaseTransform
 
 
-class VelocityFilter(BaseTransform):
+class DataFilter(BaseTransform):
 
     def __init__(self, window_size: int = 5) -> None:
         self.window_size = window_size
@@ -38,7 +38,7 @@ class VelocityFilter(BaseTransform):
         vel = self.mean_filter(vel, valid_mask)
         data['agent']['velocity'][..., :2] = vel
 
-        h = data['agent']['position'][..., [2]]
-        h = self.mean_filter(h, valid_mask)
-        data['agent']['position'][..., [2]] = h
+        p = data['agent']['position'][..., :3]
+        p = self.mean_filter(p, valid_mask)
+        data['agent']['position'][..., :3] = p
         return data

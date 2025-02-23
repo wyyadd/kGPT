@@ -19,7 +19,7 @@ from torch_geometric.transforms import Compose
 
 from datasets import WaymoSimDataset
 from transforms import SimAgentFilter, SimTargetBuilder
-from transforms.velocity_filter import VelocityFilter
+from transforms.velocity_filter import DataFilter
 
 
 class WaymoSimDataModule(pl.LightningDataModule):
@@ -64,8 +64,8 @@ class WaymoSimDataModule(pl.LightningDataModule):
         self.test_processed_dir = test_processed_dir
         self.patch_size = patch_size
         self.max_num_agents = max_num_agents
-        self.train_transform = Compose([VelocityFilter(), SimAgentFilter(max_num_agents), SimTargetBuilder(patch_size)])
-        self.val_transform = Compose([VelocityFilter(), SimAgentFilter(max_num_agents), SimTargetBuilder(patch_size)])
+        self.train_transform = Compose([DataFilter(), SimAgentFilter(max_num_agents), SimTargetBuilder(patch_size)])
+        self.val_transform = Compose([DataFilter(), SimAgentFilter(max_num_agents), SimTargetBuilder(patch_size)])
 
     def prepare_data(self) -> None:
         WaymoSimDataset(self.root, 'train', self.interactive, self.train_raw_dir, self.train_processed_dir,

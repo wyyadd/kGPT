@@ -14,7 +14,7 @@
 
 import torch
 import torch.nn as nn
-from torch_cluster import knn
+from torch_cluster import knn, knn_graph
 from torch_geometric.data import Batch
 from torch_geometric.data import HeteroData
 from torch_geometric.utils import dense_to_sparse
@@ -73,7 +73,7 @@ class KGPTDecoder(nn.Module):
 
         self.t_attn_layers = nn.ModuleList(
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
-                            bipartite=False, has_pos_emb=True) for _ in range(num_layers + 1)]
+                            bipartite=False, has_pos_emb=True) for _ in range(num_layers+patch_size)]
         )
         self.m2a_attn_layers = nn.ModuleList(
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
@@ -83,6 +83,7 @@ class KGPTDecoder(nn.Module):
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
                             bipartite=False, has_pos_emb=True) for _ in range(num_layers)]
         )
+        # self.to_patch = MLPLayer(hidden_dim, hidden_dim, patch_size * hidden_dim)
         self.h_norm = nn.RMSNorm(hidden_dim)
         self.out_norm = nn.RMSNorm(hidden_dim)
         self.to_input = MLPLayer(hidden_dim * 2, hidden_dim, hidden_dim)
@@ -155,49 +156,71 @@ class KGPTDecoder(nn.Module):
              rel_orient_m2a], dim=-1)
         r_m2a = self.r_m2a_emb(continuous_inputs=r_m2a, categorical_embs=None)
 
-        pos_s_i = pos_a[target].transpose(0, 1).reshape(-1, self.input_dim)
-        head_s_i = head_a[target].transpose(0, 1).reshape(-1)
-        head_vector_s_i = head_vector_a[target].transpose(0, 1).reshape(-1, 2)
-        mask_s_i = mask[target].transpose(0, 1).reshape(-1)
-        valid_index_s_i = torch.where(mask_s_i)[0]
-        pos_s_j = pos_a.transpose(0, 1).reshape(-1, self.input_dim)
-        head_s_j = head_a.transpose(0, 1).reshape(-1)
-        mask_s_j = mask.transpose(0, 1).reshape(-1)
-        valid_index_s_j = torch.where(mask_s_j)[0]
+        pos_s = pos_a[target].transpose(0, 1).reshape(-1, self.input_dim)
+        head_s = head_a[target].transpose(0, 1).reshape(-1)
+        head_vector_s = head_vector_a[target].transpose(0, 1).reshape(-1, 2)
+        mask_s = mask[target].transpose(0, 1).reshape(-1)
+        valid_index_s = torch.where(mask_s)[0]
         if isinstance(data, Batch):
-            batch_s_i = torch.cat([data['agent']['batch'][target] + data.num_graphs * t for t in range(self.num_steps)], dim=0)
-            batch_s_j = torch.cat([data['agent']['batch'] + data.num_graphs * t for t in range(self.num_steps)], dim=0)
+            batch_s = torch.cat([data['agent']['batch'][target] + data.num_graphs * t for t in range(self.num_steps)], dim=0)
         else:
-            batch_s_i = torch.arange(self.num_steps, device=pos_a.device).repeat_interleave(target.numel())
-            batch_s_j = torch.arange(self.num_steps, device=pos_a.device).repeat_interleave(data['agent']['num_nodes'])
-        edge_index_a2a = knn(x=pos_s_j[:, :2], y=pos_s_i[:, :2], k=self.num_a2a_nbrs + 1, batch_x=batch_s_j, batch_y=batch_s_i)
-        row_s, col_s = edge_index_a2a[1], edge_index_a2a[0]
-        mask_s = row_s != col_s
-        edge_index_a2a = torch.stack([row_s[mask_s], col_s[mask_s]], dim=0)
-        edge_index_a2a = subgraph(subset=mask_s_j, edge_index=edge_index_a2a)[0]
-        rel_pos_a2a = pos_s_j[edge_index_a2a[0]] - pos_s_i[edge_index_a2a[1]]
-        rel_head_a2a = wrap_angle(head_s_j[edge_index_a2a[0]] - head_s_i[edge_index_a2a[1]])
+            batch_s = torch.arange(self.num_steps, device=pos_a.device).repeat_interleave(data['agent']['num_nodes'])
+        edge_index_a2a = knn_graph(x=pos_s[:, :2], k=self.num_a2a_nbrs, batch=batch_s, loop=False)
+        edge_index_a2a = subgraph(subset=mask_s, edge_index=edge_index_a2a)[0]
+        rel_pos_a2a = pos_s[edge_index_a2a[0]] - pos_s[edge_index_a2a[1]]
+        rel_head_a2a = wrap_angle(head_s[edge_index_a2a[0]] - head_s[edge_index_a2a[1]])
         r_a2a = torch.stack(
             [torch.norm(rel_pos_a2a[:, :2], p=2, dim=-1),
-             angle_between_2d_vectors(ctr_vector=head_vector_s_i[edge_index_a2a[1]], nbr_vector=rel_pos_a2a[:, :2]),
+             angle_between_2d_vectors(ctr_vector=head_vector_s[edge_index_a2a[1]], nbr_vector=rel_pos_a2a[:, :2]),
              rel_pos_a2a[:, -1],
              rel_head_a2a], dim=-1)
         r_a2a = self.r_a2a_emb(continuous_inputs=r_a2a, categorical_embs=None)
 
-        x_a_env = x_a.transpose(0, 1).reshape(-1, self.hidden_dim)
+        # pos_s_i = pos_a[target].transpose(0, 1).reshape(-1, self.input_dim)
+        # head_s_i = head_a[target].transpose(0, 1).reshape(-1)
+        # head_vector_s_i = head_vector_a[target].transpose(0, 1).reshape(-1, 2)
+        # mask_s_i = mask[target].transpose(0, 1).reshape(-1)
+        # valid_index_s_i = torch.where(mask_s_i)[0]
+        # pos_s_j = pos_a.transpose(0, 1).reshape(-1, self.input_dim)
+        # head_s_j = head_a.transpose(0, 1).reshape(-1)
+        # mask_s_j = mask.transpose(0, 1).reshape(-1)
+        # valid_index_s_j = torch.where(mask_s_j)[0]
+        # if isinstance(data, Batch):
+        #     batch_s_i = torch.cat([data['agent']['batch'][target] + data.num_graphs * t for t in range(self.num_steps)], dim=0)
+        #     batch_s_j = torch.cat([data['agent']['batch'] + data.num_graphs * t for t in range(self.num_steps)], dim=0)
+        # else:
+        #     batch_s_i = torch.arange(self.num_steps, device=pos_a.device).repeat_interleave(target.numel())
+        #     batch_s_j = torch.arange(self.num_steps, device=pos_a.device).repeat_interleave(data['agent']['num_nodes'])
+        # edge_index_a2a = knn(x=pos_s_j[:, :2], y=pos_s_i[:, :2], k=self.num_a2a_nbrs + 1, batch_x=batch_s_j, batch_y=batch_s_i)
+        # row_s, col_s = edge_index_a2a[1], edge_index_a2a[0]
+        # mask_s = row_s != col_s
+        # edge_index_a2a = torch.stack([row_s[mask_s], col_s[mask_s]], dim=0)
+        # edge_index_a2a = subgraph(subset=mask_s_j, edge_index=edge_index_a2a)[0]
+        # rel_pos_a2a = pos_s_j[edge_index_a2a[0]] - pos_s_i[edge_index_a2a[1]]
+        # rel_head_a2a = wrap_angle(head_s_j[edge_index_a2a[0]] - head_s_i[edge_index_a2a[1]])
+        # r_a2a = torch.stack(
+        #     [torch.norm(rel_pos_a2a[:, :2], p=2, dim=-1),
+        #      angle_between_2d_vectors(ctr_vector=head_vector_s_i[edge_index_a2a[1]], nbr_vector=rel_pos_a2a[:, :2]),
+        #      rel_pos_a2a[:, -1],
+        #      rel_head_a2a], dim=-1)
+        # r_a2a = self.r_a2a_emb(continuous_inputs=r_a2a, categorical_embs=None)
+        #
+        # x_a_env = x_a.transpose(0, 1).reshape(-1, self.hidden_dim)
         x_a = x_a[target].reshape(-1, self.hidden_dim)
         for i in range(self.num_layers):
             x_a = self.t_attn_layers[i](x_a, r_t, edge_index_t, valid_index=valid_index_t)
             x_a = self.m2a_attn_layers[i]((x_m, x_a), r_m2a, edge_index_m2a, valid_index=(valid_index_m, valid_index_t))
             x_a = x_a.reshape(-1, self.num_steps, self.hidden_dim).transpose(0, 1).reshape(-1, self.hidden_dim)
-            x_a = self.a2a_attn_layers[i]((x_a_env, x_a), r_a2a, edge_index_a2a, valid_index=(valid_index_s_j, valid_index_s_i))
+            # x_a = self.a2a_attn_layers[i]((x_a_env, x_a), r_a2a, edge_index_a2a, valid_index=(valid_index_s_j, valid_index_s_i))
+            x_a = self.a2a_attn_layers[i](x_a, r_a2a, edge_index_a2a, valid_index=valid_index_s)
             x_a = x_a.reshape(self.num_steps, -1, self.hidden_dim).transpose(0, 1).reshape(-1, self.hidden_dim)
         # [steps*agents, dim, patch]
         h = x_a
         x_a = x_a.new_zeros(*x_a.shape, self.patch_size + 1)
         x_a[..., 0] = h
+        # x_a[..., 1:] = self.to_patch(h).reshape(-1, self.hidden_dim, self.patch_size)
         for i in range(self.patch_size):
-            out = self.t_attn_layers[self.num_layers](h, r_t, edge_index_t, valid_index=valid_index_t)
+            out = self.t_attn_layers[self.num_layers+i](h, r_t, edge_index_t, valid_index=valid_index_t)
             h = self.to_input(torch.cat([self.h_norm(h), self.out_norm(out)], dim=-1))
             x_a[..., i + 1] = out
         return x_a.reshape(-1, self.num_steps, self.hidden_dim, self.patch_size + 1)

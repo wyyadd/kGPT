@@ -91,4 +91,4 @@ class SimAgentFilter(BaseTransform):
             data['agent']['target_idx'] = torch.arange(data['agent']['num_nodes'], dtype=torch.long,
                                                        device=data['agent']['position'].device)
             return data
-        return self.new_filter(data)
+        return self.legacy_filter(data)

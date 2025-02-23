@@ -52,11 +52,10 @@ class SimTargetBuilder(BaseTransform):
         # num_agent, steps, patch_size, 3
         data['agent']['target'] = pos.new_zeros(data['agent']['num_nodes'], pos.size(-2), self.patch, 6)
         delta_p = ((pos[:, 1:, :2] - pos[:, :-1, :2]).unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
-        delta_v = (vel[:, 1:, :2].unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
         delta_h = pos[:, 1:, 2] - pos[:, :-1, 2]
+        delta_v = (vel[:, 1:, :2].unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2)
         delta_yaw = wrap_angle(head[:, 1:] - head[:, :-1])
 
-        # target: 0-2: delta_v (acc), 2: delta_h, 3: delta_yaw
         for t in range(self.patch):
             data['agent']['target'][:, :-t - 1, t, :2] = delta_p[:, t:]
             data['agent']['target'][:, :-t - 1, t, 2] = delta_h[:, t:]

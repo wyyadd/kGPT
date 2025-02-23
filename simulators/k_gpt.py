@@ -115,8 +115,8 @@ class KGPT(pl.LightningModule):
         pred = self(data)
         pi = pred['pi']
         pred = torch.cat([
-            pred['delta_h'], pred['delta_v'], pred['delta_yaw'],
-            pred['h_scale'], pred['v_scale'], pred['yaw_scale']], dim=-1)
+            pred['delta_p'], pred['delta_v'], pred['delta_yaw'],
+            pred['p_scale'], pred['v_scale'], pred['yaw_scale']], dim=-1)
         target = data['agent']['target']
 
         if self.num_modes == 1:
@@ -145,8 +145,8 @@ class KGPT(pl.LightningModule):
         pred = self(data)
         pi = pred['pi']
         pred = torch.cat([
-            pred['delta_h'], pred['delta_v'], pred['delta_yaw'],
-            pred['h_scale'], pred['v_scale'], pred['yaw_scale']], dim=-1)
+            pred['delta_p'], pred['delta_v'], pred['delta_yaw'],
+            pred['p_scale'], pred['v_scale'], pred['yaw_scale']], dim=-1)
         target = data['agent']['target']
 
         if self.num_modes == 1:
@@ -183,9 +183,9 @@ class KGPT(pl.LightningModule):
                 pi = pred['pi'][:, start_steps - 1, :num_action_steps]  # [agents, steps, patch, modes]
                 sample_inds = torch.multinomial(F.softmax(pi, dim=-1), num_samples=1, replacement=True).squeeze(-1)
                 # sample_inds = top_p_sampling(pi, 0.95)
+                delta_p = pred['delta_p'][torch.arange(pi.size(0)), start_steps - 1, sample_inds, :num_action_steps, :3]
                 delta_v = pred['delta_v'][torch.arange(pi.size(0)), start_steps - 1, sample_inds, :num_action_steps, :2]
                 delta_yaw = pred['delta_yaw'][torch.arange(pi.size(0)), start_steps - 1, sample_inds, :num_action_steps, :1]
-                delta_h = pred['delta_h'][torch.arange(pi.size(0)), start_steps - 1, sample_inds, :num_action_steps, :3]
 
                 # cur_yaw = data['agent']['heading'][:, [start_steps - 1]].unsqueeze(-1)
                 cur_yaw = data['agent']['heading'][:, start_steps - 1]
@@ -208,10 +208,10 @@ class KGPT(pl.LightningModule):
                 # position
                 position_xy = data['agent']['position'][:, [start_steps - 1], :2]
                 # position_xy = position_xy + (vel * interval).cumsum(dim=1)
-                position_xy = position_xy + delta_h[..., :2] @ rot_mat
-                # position_xy = position_xy + (delta_h[..., :2].unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2).cumsum(dim=1)
+                position_xy = position_xy + delta_p[..., :2] @ rot_mat
+                # position_xy = position_xy + (delta_p[..., :2].unsqueeze(-2) @ rot_mat[:, :-1]).squeeze(-2).cumsum(dim=1)
                 position_z = data['agent']['position'][:, [start_steps - 1], 2].unsqueeze(-1)
-                position_z = position_z + delta_h[..., [-1]]
+                position_z = position_z + delta_p[..., [-1]]
 
                 # update
                 data['agent']['velocity'][:, start_steps:end_steps, :self.vel_dim] = vel

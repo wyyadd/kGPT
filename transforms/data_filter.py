@@ -38,7 +38,7 @@ class DataFilter(BaseTransform):
         vel = self.mean_filter(vel, valid_mask)
         data['agent']['velocity'][..., :2] = vel
 
-        p = data['agent']['position'][..., :3]
+        p = data['agent']['position'][..., [2]]
         p = self.mean_filter(p, valid_mask)
-        data['agent']['position'][..., :3] = p
+        data['agent']['position'][..., [2]] = p
         return data

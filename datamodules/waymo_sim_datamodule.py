@@ -18,8 +18,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import Compose
 
 from datasets import WaymoSimDataset
-from transforms import SimAgentFilter, SimTargetBuilder
-from transforms.velocity_filter import DataFilter
+from transforms import SimAgentFilter, SimTargetBuilder, DataFilter
 
 
 class WaymoSimDataModule(pl.LightningDataModule):

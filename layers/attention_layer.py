@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import softmax
 
+from layers.shrinkage import Shrinkage
 from utils import weight_init
 
 
@@ -55,6 +56,7 @@ class AttentionLayer(MessagePassing):
             self.to_q_r = nn.Linear(hidden_dim, self.num_heads * head_dim)
         # self.to_s = nn.Linear(hidden_dim, self.num_heads * head_dim)
         # self.to_g = nn.Linear(self.num_heads * head_dim + hidden_dim, self.num_heads * head_dim)
+        self.shrinkage = Shrinkage(hidden_dim)
         self.to_out = nn.Linear(self.num_heads * self.head_dim, hidden_dim)
         self.attn_drop = nn.Dropout(dropout)
         if activation == 'relu':
@@ -167,9 +169,10 @@ class AttentionLayer(MessagePassing):
         else:
             inputs = inputs.view(-1, self.num_heads * self.head_dim)[valid_index_dst]
             # x_dst = x_dst[valid_index_dst]
-        return inputs
+        # return inputs
         # g = torch.sigmoid(self.to_g(torch.cat([inputs, x_dst], dim=-1)))
         # return inputs + g * (self.to_s(x_dst) - inputs)
+        return inputs + self.shrinkage(inputs)
 
     def _attn_block(self,
                     x_src: torch.Tensor,

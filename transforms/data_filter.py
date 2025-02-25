@@ -31,6 +31,7 @@ class DataFilter(BaseTransform):
         return smoothed_vel
 
     def __call__(self, data: HeteroData) -> HeteroData:
+        return data
         # [agents, steps, xy-dim]
         valid_mask = data['agent']['valid_mask']
 

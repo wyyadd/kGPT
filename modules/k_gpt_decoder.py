@@ -73,7 +73,7 @@ class KGPTDecoder(nn.Module):
 
         self.t_attn_layers = nn.ModuleList(
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
-                            bipartite=False, has_pos_emb=True) for _ in range(num_layers + patch_size)]
+                            bipartite=False, has_pos_emb=True) for _ in range(num_layers + 1)]
         )
         self.m2a_attn_layers = nn.ModuleList(
             [AttentionLayer(hidden_dim=hidden_dim, num_heads=num_heads, head_dim=head_dim, dropout=dropout,
@@ -111,7 +111,8 @@ class KGPTDecoder(nn.Module):
              height], dim=-1)
         type_a_emb = [self.type_a_emb(data['agent']['type'].long()).repeat_interleave(repeats=self.num_steps, dim=0)]
         valid_index_t = torch.where(mask.view(-1))[0]
-        x_a = self.x_a_emb(continuous_inputs=x_a.view(-1, x_a.size(-1)), categorical_embs=type_a_emb, valid_index=valid_index_t)
+        x_a = self.x_a_emb(continuous_inputs=x_a.view(-1, x_a.size(-1)), categorical_embs=type_a_emb,
+                           valid_index=valid_index_t)
         x_a = x_a.view(-1, self.num_steps, self.hidden_dim)
 
         x_m = torch.stack([data['map_point']['magnitude'], data['map_point']['height']], dim=-1)
@@ -188,7 +189,7 @@ class KGPTDecoder(nn.Module):
         x_a[..., 0] = h
         # x_a[..., 1:] = self.to_patch(h).reshape(-1, self.hidden_dim, self.patch_size)
         for i in range(self.patch_size):
-            out = self.t_attn_layers[self.num_layers + i](h, r_t, edge_index_t, valid_index=valid_index_t)
+            out = self.t_attn_layers[self.num_layers](h, r_t, edge_index_t, valid_index=valid_index_t)
             h = self.to_input(torch.cat([self.h_norm(h), self.out_norm(out)], dim=-1))
             x_a[..., i + 1] = out
         return x_a.reshape(-1, self.num_steps, self.hidden_dim, self.patch_size + 1)
